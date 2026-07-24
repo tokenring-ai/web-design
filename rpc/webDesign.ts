@@ -1,0 +1,77 @@
+import type TokenRingApp from "@tokenring-ai/app";
+import { createPollingQueryStream } from "@tokenring-ai/rpc/createPollingQueryStream";
+import { createRPCEndpoint } from "@tokenring-ai/rpc/createRPCEndpoint";
+import WebDesignService from "../WebDesignService.ts";
+import WebDesignRpcSchema from "./schema.ts";
+
+async function projectFlows(_args: Record<string, never>, app: TokenRingApp) {
+  const webDesignService = app.requireService(WebDesignService);
+  const flows = await webDesignService.listFlows(webDesignService.getDefaultWebDesignDirectory());
+  return { flows };
+}
+
+async function projectDesigns(args: { flowName: string }, app: TokenRingApp) {
+  const webDesignService = app.requireService(WebDesignService);
+  const designs = await webDesignService.listDesigns(webDesignService.getDefaultWebDesignDirectory(), args.flowName);
+  return { designs };
+}
+
+const streamFlows = createPollingQueryStream({
+  intervalMs: 3000,
+  poll: projectFlows,
+});
+
+const streamDesigns = createPollingQueryStream({
+  intervalMs: 3000,
+  poll: projectDesigns,
+});
+
+export default createRPCEndpoint(WebDesignRpcSchema, {
+  async listFlows(args, app: TokenRingApp) {
+    return projectFlows(args, app);
+  },
+
+  streamFlows,
+
+  async createFlow(args, app: TokenRingApp) {
+    const webDesignService = app.requireService(WebDesignService);
+    const flow = await webDesignService.createFlow(webDesignService.getDefaultWebDesignDirectory(), args.name);
+    return { flow };
+  },
+
+  async deleteFlow(args, app: TokenRingApp) {
+    const webDesignService = app.requireService(WebDesignService);
+    const success = await webDesignService.deleteFlow(webDesignService.getDefaultWebDesignDirectory(), args.name);
+    return { success };
+  },
+
+  async listDesigns(args, app: TokenRingApp) {
+    return projectDesigns(args, app);
+  },
+
+  streamDesigns,
+
+  async getDesign(args, app: TokenRingApp) {
+    const webDesignService = app.requireService(WebDesignService);
+    const design = await webDesignService.getDesign(webDesignService.getDefaultWebDesignDirectory(), args.flowName, args.name);
+    return { design };
+  },
+
+  async createDesign(args, app: TokenRingApp) {
+    const webDesignService = app.requireService(WebDesignService);
+    const design = await webDesignService.createDesign(webDesignService.getDefaultWebDesignDirectory(), args.flowName, args.name, args.content);
+    return { design };
+  },
+
+  async updateDesign(args, app: TokenRingApp) {
+    const webDesignService = app.requireService(WebDesignService);
+    const design = await webDesignService.updateDesign(webDesignService.getDefaultWebDesignDirectory(), args.flowName, args.name, args.content);
+    return { design };
+  },
+
+  async deleteDesign(args, app: TokenRingApp) {
+    const webDesignService = app.requireService(WebDesignService);
+    const success = await webDesignService.deleteDesign(webDesignService.getDefaultWebDesignDirectory(), args.flowName, args.name);
+    return { success };
+  },
+});

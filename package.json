@@ -1,0 +1,40 @@
+{
+  "name": "@tokenring-ai/web-design",
+  "version": "0.1.0",
+  "description": "Figma-style web design flows and designs, backed by files on disk.",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "test": "bun test",
+    "build": "tsc --noEmit",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage"
+  },
+  "keywords": [
+    "tokenring",
+    "web-design",
+    "design",
+    "flow",
+    "html",
+    "mockup",
+    "ai"
+  ],
+  "author": "TokenRing",
+  "license": "MIT",
+  "dependencies": {
+    "@tokenring-ai/agent": "workspace:*",
+    "@tokenring-ai/app": "workspace:*",
+    "@tokenring-ai/chat": "workspace:*",
+    "@tokenring-ai/rpc": "workspace:*",
+    "@tokenring-ai/utility": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./*": "./*.ts",
+    "./rpc/schema": "./rpc/schema.ts"
+  }
+}
