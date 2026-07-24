@@ -8,6 +8,8 @@ import { WebDesignServiceConfigSchema } from "./schema.ts";
 import tools from "./tools.ts";
 import WebDesignService from "./WebDesignService.ts";
 
+import config from "./config/index.ts";
+
 const packageConfigSchema = z.object({
   webDesign: WebDesignServiceConfigSchema,
 });
@@ -25,5 +27,6 @@ export default {
       rpcService.registerEndpoint(webDesignRPC);
     });
   },
-  config: packageConfigSchema,
+  config,
+  configSchema: packageConfigSchema,
 } satisfies TokenRingPlugin<typeof packageConfigSchema>;
