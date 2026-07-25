@@ -2,13 +2,12 @@ import type { TokenRingPlugin } from "@tokenring-ai/app";
 import { ChatService } from "@tokenring-ai/chat";
 import { RpcService } from "@tokenring-ai/rpc";
 import { z } from "zod";
+import config from "./config/index.ts";
 import packageJSON from "./package.json" with { type: "json" };
 import webDesignRPC from "./rpc/webDesign.ts";
 import { WebDesignServiceConfigSchema } from "./schema.ts";
 import tools from "./tools.ts";
 import WebDesignService from "./WebDesignService.ts";
-
-import config from "./config/index.ts";
 
 const packageConfigSchema = z.object({
   webDesign: WebDesignServiceConfigSchema,
