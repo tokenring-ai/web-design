@@ -30,16 +30,31 @@ export default class WebDesignService implements TokenRingService {
   readonly name = "WebDesignService";
   description = "Figma-style design flows and designs, backed by files on disk";
 
-  constructor(private options: ParsedWebDesignConfig) {}
+  private options: ParsedWebDesignConfig | undefined;
+
+  constructor(options?: ParsedWebDesignConfig) {
+    if (options) this.options = options;
+  }
+
+  reconfigure(options: ParsedWebDesignConfig): void {
+    this.options = options;
+  }
+
+  private requireOptions(): ParsedWebDesignConfig {
+    if (!this.options) {
+      throw new Error("WebDesignService is not configured");
+    }
+    return this.options;
+  }
 
   attach(agent: Agent, creationContext: AgentCreationContext): void {
-    const agentConfig = deepClone(this.options.agentDefaults, agent.getAgentConfigSlice("webDesign", WebDesignAgentConfigSchema));
+    const agentConfig = deepClone(this.requireOptions().agentDefaults, agent.getAgentConfigSlice("webDesign", WebDesignAgentConfigSchema));
     const initialState = agent.initializeState(WebDesignState, agentConfig);
     creationContext.items.push(`Web Design Directory: ${initialState.webDesignDirectory}`);
   }
 
   getDefaultWebDesignDirectory(): string {
-    return this.options.agentDefaults.webDesignDirectory;
+    return this.requireOptions().agentDefaults.webDesignDirectory;
   }
 
   getWebDesignDirectory(agent: Agent): string {

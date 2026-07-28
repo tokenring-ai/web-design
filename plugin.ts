@@ -18,13 +18,15 @@ export default {
   displayName: "Web Design",
   version: packageJSON.version,
   description: packageJSON.description,
-  install(app, config) {
-    const webDesign = new WebDesignService(config.webDesign);
-    app.addServices(webDesign);
+  install(app) {
+    app.addServices(new WebDesignService());
     app.waitForService(ChatService, chatService => chatService.addTools(...tools));
     app.waitForService(RpcService, rpcService => {
       rpcService.registerEndpoint(webDesignRPC);
     });
+  },
+  reconfigure(app, config) {
+    app.requireService(WebDesignService).reconfigure(config.webDesign);
   },
   config,
   configSchema: packageConfigSchema,
