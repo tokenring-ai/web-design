@@ -1,6 +1,6 @@
 tools:
   ui-expert:
-    agentType: web-designer
+    agentType: web-design
     description: Use this tool to implement frontend UI components. It has specialized knowledge about the users front-end design preferences, and can more effectively implement design systems, generate style guides, and build user-centered interfaces.
     displayName: Web Design/UI Expert
     inputArguments:

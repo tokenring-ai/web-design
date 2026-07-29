@@ -61,6 +61,25 @@ export default class WebDesignService implements TokenRingService {
     return agent.getState(WebDesignState).webDesignDirectory;
   }
 
+  getCurrentDesign(agent: Agent): Design | undefined {
+    return agent.getState(WebDesignState).currentDesign;
+  }
+
+  async selectDesign(flowName: string, designName: string, agent: Agent): Promise<Design | null> {
+    const directory = this.getWebDesignDirectory(agent);
+    const design = await this.getDesign(directory, flowName, designName);
+    agent.mutateState(WebDesignState, state => {
+      state.currentDesign = design ?? undefined;
+    });
+    return design;
+  }
+
+  clearCurrentDesign(agent: Agent): void {
+    agent.mutateState(WebDesignState, state => {
+      state.currentDesign = undefined;
+    });
+  }
+
   private resolveFlowDirectory(root: string, flowName: string): string {
     assertValidName(flowName, "flow");
     return path.join(root, flowName);

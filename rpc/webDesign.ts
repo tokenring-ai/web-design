@@ -1,6 +1,8 @@
+import { AgentManager } from "@tokenring-ai/agent";
 import type TokenRingApp from "@tokenring-ai/app";
 import { createPollingQueryStream } from "@tokenring-ai/rpc/createPollingQueryStream";
 import { createRPCEndpoint } from "@tokenring-ai/rpc/createRPCEndpoint";
+import { WebDesignState } from "../state/WebDesignState.ts";
 import WebDesignService from "../WebDesignService.ts";
 import WebDesignRpcSchema from "./schema.ts";
 
@@ -73,5 +75,39 @@ export default createRPCEndpoint(WebDesignRpcSchema, {
     const webDesignService = app.requireService(WebDesignService);
     const success = await webDesignService.deleteDesign(webDesignService.getDefaultWebDesignDirectory(), args.flowName, args.name);
     return { success };
+  },
+
+  getWebDesignState(args, app: TokenRingApp) {
+    const agent = app.requireService(AgentManager).getAgent(args.agentId);
+    if (!agent) {
+      return { status: "agentNotFound" };
+    }
+
+    const state = agent.getState(WebDesignState);
+    return {
+      status: "success",
+      selectedFlowName: state.currentDesign?.flowName ?? null,
+      selectedDesignName: state.currentDesign?.name ?? null,
+    };
+  },
+
+  async updateWebDesignState(args, app: TokenRingApp) {
+    const agent = app.requireService(AgentManager).getAgent(args.agentId);
+    if (!agent) {
+      return { status: "agentNotFound" };
+    }
+
+    const webDesignService = app.requireService(WebDesignService);
+
+    if (args.selectedFlowName && args.selectedDesignName) {
+      await webDesignService.selectDesign(args.selectedFlowName, args.selectedDesignName, agent);
+    }
+
+    const state = agent.getState(WebDesignState);
+    return {
+      status: "success",
+      selectedFlowName: state.currentDesign?.flowName ?? null,
+      selectedDesignName: state.currentDesign?.name ?? null,
+    };
   },
 });

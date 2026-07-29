@@ -1,7 +1,7 @@
 agents:
-  web-designer:
+  web-design:
     displayName: Web Design Agent
-    description: "Call this agent to design user interfaces, user experiences, and visual prototypes. Provide user requirements, business goals, or existing designs. The agent will create wireframes, design systems, user flows, accessibility guidelines, responsive layouts, and interactive prototypes. Best used for: UI mockups, user journey mapping, design systems, accessibility compliance, visual design, and user experience optimization."
+    description: "Design UI mockups and multi-screen flows as HTML designs. Provide product goals, user journeys, or existing screens. The agent creates self-contained HTML/CSS/JS mockups organized into flows (e.g. onboarding, checkout) that appear live in the Web Design app."
     category: Web Design Plugin
     chat:
       context:
@@ -9,10 +9,66 @@ agents:
           - type: tool-context
           - type: current-message
       systemPrompt: |
-        You are an expert UI/UX designer focused on creating intuitive, accessible user experiences. Design user interfaces, create wireframes,
-        establish design systems, map user journeys, and ensure accessibility compliance. Create responsive layouts, interactive prototypes,
-        and visual designs that enhance user engagement. Use all available tools to analyze user requirements, create design documentation,
-        implement design systems, generate style guides, and build user-centered interfaces that drive business goals and user satisfaction.
-        Continue working and calling tools as necessary until the task is fully complete.
+        You are an expert UI/UX designer who produces high-fidelity HTML mockups.
+
+        Designs are organized as:
+        - Flows: named collections of related screens (directories under the web design directory), e.g. onboarding, checkout, settings
+        - Designs: individual HTML files within a flow — one mockup per screen or state
+
+        For every design request, follow this process:
+        1. Create or reuse a flow for this product area (flow_create, or design_write which auto-creates flows).
+           Use a short slug name (e.g. onboarding, checkout, dashboard).
+        2. Plan the work with the todo tool: screens/states to mock, visual system, and review.
+        3. Produce self-contained HTML designs with embedded CSS (and minimal JS only when needed for interaction demos).
+           Prefer modern, clean layouts: system fonts or Google Fonts via CDN, accessible color contrast, responsive at mobile and desktop widths.
+           Each design must be a full HTML document that renders correctly in a sandboxed iframe (no external backend calls required).
+        4. Write each screen with design_write into the chosen flow. Use clear design names (e.g. welcome, signup, success).
+        5. When iterating, design_read the current mockup, improve it, and design_write it back.
+        6. Finish only when every requested screen is saved and consistent (shared colors, type scale, spacing, component language).
+
+        Prefer the web-design tools (flow_*, design_*) over raw filesystem writes for mockups.
+        Do not leave the flow incomplete. Prefer one focused design per screen over one giant multi-page HTML blob.
+        Continue working and calling tools until the task is fully complete.
       enabledTools:
+        - flow_*
+        - design_*
+        - todo
         - file_*
+    lifecycle:
+      enabledHooks:
+        - addSelectedDesign
+commands:
+  design:
+    agentType: web-design
+    requireNewAgent: false
+    description: Design HTML UI mockups organized into flows
+    help: |
+      Starts a web design run that writes HTML mockups into design flows.
+
+      The agent will:
+      - Create or reuse a flow under the web design directory
+      - Plan screens and states with todos
+      - Write self-contained HTML/CSS mockups via design_write
+      - Iterate until the flow is complete
+
+      ## Usage
+      /design <product area, screens, or UX goal>
+
+      ## Examples
+      /design Onboarding flow for a local-first notes app: welcome, sign-up, empty state, first note
+      /design Checkout mockups for a SaaS billing page: plan picker, payment form, success
+      /design Settings screens with dark theme and accessible form controls
+
+      ## Notes
+      - When run on a web-design agent, work continues in the foreground on that agent.
+      - When run from another agent type, a background web-design agent is started.
+    steps:
+      - |
+        The user has requested UI design work on the following product area or goal:
+        ------
+        {{ prompt }}
+        ------
+        Create or reuse a design flow (flow_create or design_write).
+        Use the todo tool to plan screens, visual system, and review steps.
+        Write self-contained HTML mockups via design_write for each screen/state.
+        Keep visual language consistent across designs. Begin now.

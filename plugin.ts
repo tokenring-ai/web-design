@@ -1,8 +1,10 @@
 import type { TokenRingPlugin } from "@tokenring-ai/app";
 import { ChatService } from "@tokenring-ai/chat";
+import { AgentLifecycleService } from "@tokenring-ai/lifecycle";
 import { RpcService } from "@tokenring-ai/rpc";
 import { z } from "zod";
 import config from "./config/index.ts";
+import addSelectedDesign from "./hooks/addSelectedDesign.ts";
 import packageJSON from "./package.json" with { type: "json" };
 import webDesignRPC from "./rpc/webDesign.ts";
 import { WebDesignServiceConfigSchema } from "./schema.ts";
@@ -20,6 +22,7 @@ export default {
   description: packageJSON.description,
   install(app) {
     app.addServices(new WebDesignService());
+    app.waitForService(AgentLifecycleService, lifecycleService => lifecycleService.addHooks(addSelectedDesign));
     app.waitForService(ChatService, chatService => chatService.addTools(...tools));
     app.waitForService(RpcService, rpcService => {
       rpcService.registerEndpoint(webDesignRPC);

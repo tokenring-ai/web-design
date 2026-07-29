@@ -1,4 +1,5 @@
 import type { RPCSchema } from "@tokenring-ai/rpc/types";
+import { AgentNotFoundSchema, SuccessSchema } from "@tokenring-ai/rpc/types";
 import { z } from "zod";
 import { DesignSchema, DesignSummarySchema, FlowSummarySchema } from "../schema.ts";
 
@@ -97,6 +98,34 @@ export default {
       result: z.object({
         success: z.boolean(),
       }),
+    },
+    getWebDesignState: {
+      type: "query",
+      input: z.object({
+        agentId: z.string(),
+      }),
+      result: z.discriminatedUnion("status", [
+        SuccessSchema.extend({
+          selectedFlowName: z.string().nullable(),
+          selectedDesignName: z.string().nullable(),
+        }),
+        AgentNotFoundSchema,
+      ]),
+    },
+    updateWebDesignState: {
+      type: "mutation",
+      input: z.object({
+        agentId: z.string(),
+        selectedFlowName: z.string().exactOptional(),
+        selectedDesignName: z.string().exactOptional(),
+      }),
+      result: z.discriminatedUnion("status", [
+        SuccessSchema.extend({
+          selectedFlowName: z.string().nullable(),
+          selectedDesignName: z.string().nullable(),
+        }),
+        AgentNotFoundSchema,
+      ]),
     },
   },
 } satisfies RPCSchema;
