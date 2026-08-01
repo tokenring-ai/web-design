@@ -61,13 +61,13 @@ export default createRPCEndpoint(WebDesignRpcSchema, {
 
   async createDesign(args, app: TokenRingApp) {
     const webDesignService = app.requireService(WebDesignService);
-    const design = await webDesignService.createDesign(webDesignService.getDefaultWebDesignDirectory(), args.flowName, args.name, args.content);
+    const design = await webDesignService.createDesign(webDesignService.getDefaultWebDesignDirectory(), args.flowName, args.name, args.content, args.encoding);
     return { design };
   },
 
   async updateDesign(args, app: TokenRingApp) {
     const webDesignService = app.requireService(WebDesignService);
-    const design = await webDesignService.updateDesign(webDesignService.getDefaultWebDesignDirectory(), args.flowName, args.name, args.content);
+    const design = await webDesignService.updateDesign(webDesignService.getDefaultWebDesignDirectory(), args.flowName, args.name, args.content, args.encoding);
     return { design };
   },
 

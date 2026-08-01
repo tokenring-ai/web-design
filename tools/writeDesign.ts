@@ -6,10 +6,10 @@ import WebDesignService from "../WebDesignService.ts";
 const name = "design_write";
 const displayName = "Web Design/write design";
 
-async function execute({ flowName, name: designName, content }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
-  const webDesignService = agent.requireServiceByType(WebDesignService);
+async function execute({ flowName, name: designName, content, encoding }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
+  const webDesignService = agent.requireService(WebDesignService);
   const directory = webDesignService.getWebDesignDirectory(agent);
-  const design = await webDesignService.updateDesign(directory, flowName, designName, content);
+  const design = await webDesignService.updateDesign(directory, flowName, designName, content, encoding);
 
   return {
     message: `**Web Design** Saved "${flowName}/${designName}"`,
@@ -18,12 +18,13 @@ async function execute({ flowName, name: designName, content }: z.output<typeof 
 }
 
 const description =
-  "Create or overwrite a design (a single HTML mockup) within a design flow. The flow is created automatically if it doesn't already exist. Use this to save UI mockups so they can be referenced later or viewed by the user.";
+  "Create or overwrite a text file within a design flow. Files in the same flow are hosted together, so HTML can link to sibling CSS and JavaScript files with relative URLs. The flow is created automatically if it doesn't already exist.";
 
 const inputSchema = z.object({
   flowName: z.string().describe("Name of the flow this design belongs to; created automatically if it doesn't exist"),
-  name: z.string().describe("Name of the design to create or update"),
-  content: z.string().describe("Full HTML content of the design"),
+  name: z.string().describe("File name to create or update, including its extension (for example index.html, styles.css, or app.js)"),
+  content: z.string().describe("Full text content, or base64 data when encoding is base64"),
+  encoding: z.enum(["utf8", "base64"]).default("utf8").describe("How content is encoded"),
 });
 
 export default {

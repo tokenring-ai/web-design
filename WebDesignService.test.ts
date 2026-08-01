@@ -51,7 +51,7 @@ describe("WebDesignService", () => {
     const service = makeService(dir);
 
     const created = await service.createDesign(dir, "onboarding", "welcome", "<h1>Hello</h1>");
-    expect(created).toMatchObject({ flowName: "onboarding", name: "welcome", content: "<h1>Hello</h1>" });
+    expect(created).toMatchObject({ flowName: "onboarding", name: "welcome.html", content: "<h1>Hello</h1>", mimeType: "text/html", encoding: "utf8" });
     expect(fs.existsSync(path.join(dir, "onboarding", "welcome.html"))).toBe(true);
 
     const fetched = await service.getDesign(dir, "onboarding", "welcome");
@@ -63,7 +63,7 @@ describe("WebDesignService", () => {
     const service = makeService(dir);
 
     await service.createDesign(dir, "flow", "page", "one");
-    await expect(service.createDesign(dir, "flow", "page", "two")).rejects.toThrow('Design "page" already exists in flow "flow"');
+    await expect(service.createDesign(dir, "flow", "page", "two")).rejects.toThrow('File "page" already exists in flow "flow"');
   });
 
   test("updateDesign overwrites existing content and creates missing designs", async () => {
@@ -97,19 +97,38 @@ describe("WebDesignService", () => {
     expect(await service.deleteFlow(dir, "flow")).toBe(false);
   });
 
-  test("listFlows reports design counts, listDesigns only includes .html files sorted by name", async () => {
+  test("listFlows reports file counts and listDesigns includes all flow files sorted by name", async () => {
     const dir = tempDir();
     const service = makeService(dir);
 
     await service.createDesign(dir, "flow", "b-page", "b");
     await service.createDesign(dir, "flow", "a-page", "a");
-    fs.writeFileSync(path.join(dir, "flow", "notes.txt"), "not a design");
+    fs.writeFileSync(path.join(dir, "flow", "notes.txt"), "supporting content");
 
     const flows = await service.listFlows(dir);
-    expect(flows).toEqual([expect.objectContaining({ name: "flow", designCount: 2 })]);
+    expect(flows).toEqual([expect.objectContaining({ name: "flow", designCount: 3 })]);
 
     const designs = await service.listDesigns(dir, "flow");
-    expect(designs.map(d => d.name)).toEqual(["a-page", "b-page"]);
+    expect(designs.map(d => d.name)).toEqual(["a-page.html", "b-page.html", "notes.txt"]);
+    expect(designs.find(d => d.name === "notes.txt")?.mimeType).toBe("text/plain");
+  });
+
+  test("stores linked text and binary assets with their original file names", async () => {
+    const dir = tempDir();
+    const service = makeService(dir);
+
+    await service.createDesign(dir, "site", "index.html", '<link rel="stylesheet" href="styles.css">');
+    await service.createDesign(dir, "site", "styles.css", "body { color: rebeccapurple; }");
+    await service.createDesign(dir, "site", "pixel.png", Buffer.from([0, 1, 2, 3]).toString("base64"), "base64");
+
+    expect(fs.readFileSync(path.join(dir, "site", "styles.css"), "utf8")).toContain("rebeccapurple");
+    expect([...fs.readFileSync(path.join(dir, "site", "pixel.png"))]).toEqual([0, 1, 2, 3]);
+    expect(await service.getDesign(dir, "site", "pixel.png")).toMatchObject({
+      name: "pixel.png",
+      encoding: "base64",
+      mimeType: "image/png",
+      content: Buffer.from([0, 1, 2, 3]).toString("base64"),
+    });
   });
 
   test("rejects invalid flow and design names", async () => {
@@ -117,6 +136,7 @@ describe("WebDesignService", () => {
     const service = makeService(dir);
 
     await expect(service.createFlow(dir, "../escape")).rejects.toThrow("Invalid flow name");
-    await expect(service.createDesign(dir, "flow", "has space", "x")).rejects.toThrow("Invalid design name");
+    await expect(service.createDesign(dir, "flow", "has space.css", "x")).rejects.toThrow("Invalid file name");
+    await expect(service.createDesign(dir, "flow", "../escape.css", "x")).rejects.toThrow("Invalid file name");
   });
 });

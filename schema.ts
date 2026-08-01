@@ -12,12 +12,14 @@ export const DesignSummarySchema = z.object({
   flowName: z.string(),
   name: z.string(),
   size: z.number(),
+  mimeType: z.string().default("text/html"),
   updatedAt: z.string(),
 });
 export type DesignSummary = z.output<typeof DesignSummarySchema>;
 
 export const DesignSchema = DesignSummarySchema.extend({
   content: z.string(),
+  encoding: z.enum(["utf8", "base64"]).default("utf8"),
 });
 export type Design = z.output<typeof DesignSchema>;
 

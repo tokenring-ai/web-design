@@ -7,7 +7,7 @@ const name = "flow_list";
 const displayName = "Web Design/list flows";
 
 async function execute(_input: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
-  const webDesignService = agent.requireServiceByType(WebDesignService);
+  const webDesignService = agent.requireService(WebDesignService);
   const directory = webDesignService.getWebDesignDirectory(agent);
   const flows = await webDesignService.listFlows(directory);
 

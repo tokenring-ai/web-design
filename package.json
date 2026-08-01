@@ -28,6 +28,7 @@
     "@tokenring-ai/lifecycle": "workspace:*",
     "@tokenring-ai/rpc": "workspace:*",
     "@tokenring-ai/utility": "workspace:*",
+    "@tokenring-ai/web-host": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {

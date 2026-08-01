@@ -73,6 +73,7 @@ export default {
         flowName: z.string(),
         name: z.string(),
         content: z.string().default(""),
+        encoding: z.enum(["utf8", "base64"]).default("utf8"),
       }),
       result: z.object({
         design: DesignSchema,
@@ -84,6 +85,7 @@ export default {
         flowName: z.string(),
         name: z.string(),
         content: z.string(),
+        encoding: z.enum(["utf8", "base64"]).default("utf8"),
       }),
       result: z.object({
         design: DesignSchema,

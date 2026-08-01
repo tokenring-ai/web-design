@@ -7,21 +7,21 @@ const name = "design_delete";
 const displayName = "Web Design/delete design";
 
 async function execute({ flowName, name: designName }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
-  const webDesignService = agent.requireServiceByType(WebDesignService);
+  const webDesignService = agent.requireService(WebDesignService);
   const directory = webDesignService.getWebDesignDirectory(agent);
   const success = await webDesignService.deleteDesign(directory, flowName, designName);
 
   return {
-    message: success ? `**Web Design** Deleted "${flowName}/${designName}"` : `**Web Design** Design "${designName}" not found in flow "${flowName}"`,
+    message: success ? `**Web Design** Deleted "${flowName}/${designName}"` : `**Web Design** File "${designName}" not found in flow "${flowName}"`,
     result: JSON.stringify({ success }),
   };
 }
 
-const description = "Delete a design (a single HTML mockup) from a design flow";
+const description = "Delete a file from a design flow";
 
 const inputSchema = z.object({
   flowName: z.string().describe("Name of the flow the design belongs to"),
-  name: z.string().describe("Name of the design to delete"),
+  name: z.string().describe("File name to delete, including its extension"),
 });
 
 export default {

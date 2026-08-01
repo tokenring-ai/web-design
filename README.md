@@ -1,21 +1,22 @@
 # @tokenring-ai/web-design
 
-Figma-style web design flows and designs, backed by files on disk.
+Browser-ready web design flows backed by files on disk.
 
 ## Overview
 
-The `@tokenring-ai/web-design` package provides a simple two-level document store for HTML mockups, using
-Figma-familiar terminology:
+The `@tokenring-ai/web-design` package provides a simple two-level file store for browser-ready mockups:
 
-- A **Design** is a single HTML file — one UI mockup.
-- A **Flow** is a named collection of related Designs (e.g. an onboarding flow, a checkout flow).
+- A **Flow** is a named collection of related pages and assets (e.g. an onboarding flow or checkout flow).
+- A flow may contain HTML, CSS, JavaScript, images, fonts, and other browser assets.
 
-Designs are typically UI mockups that an agent creates and iterates on while doing frontend work, organized into
-Flows, and viewed/edited directly by users in the Web Design app.
+Files in a flow are hosted together at `/web-design-preview/<flow>/<file>`, so pages can link sibling files with
+ordinary relative URLs. Text files can be viewed and edited directly in the Web Design app; arbitrary files can be
+uploaded as flow assets.
 
 ## Key Features
 
-- **Flows & Designs**: Designs are grouped into named Flows, stored as `<webDesignDirectory>/<flow>/<design>.html`
+- **Multi-file Flows**: HTML, CSS, JavaScript, images, fonts, and other files are stored as `<webDesignDirectory>/<flow>/<file>`
+- **Hosted Previews**: Flow files are served from `/web-design-preview/<flow>/<file>` with browser sandbox headers
 - **Shared or Per-Agent Directory**: One configured root directory by default, with optional per-agent overrides
 - **CRUD via RPC**: List, create, retrieve, update, and delete flows and designs from the frontend
 - **CRUD via Tools**: Agents can list, read, write, and delete flows and designs while doing frontend work
@@ -60,9 +61,9 @@ Agents may override `webDesignDirectory` via their own `webDesign.webDesignDirec
 
 ## Naming
 
-Flow and design names must start with a letter or number and may only contain letters, numbers, hyphens, and
-underscores (`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`). A design named `welcome` in a flow named `onboarding` is stored at
-`onboarding/welcome.html` in the web design directory.
+Flow names must start with a letter or number and may contain letters, numbers, hyphens, and underscores. File names
+may additionally contain dots and should include their extension. For backward compatibility, a file name without an
+extension is stored with `.html`.
 
 ## Tools
 
@@ -71,10 +72,10 @@ underscores (`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`). A design named `welcome` in a flow 
 | `flow_list`    | `Web Design/list flows`       | List the design flows in the web design directory        |
 | `flow_create`  | `Web Design/create flow`      | Create a new, empty design flow                          |
 | `flow_delete`  | `Web Design/delete flow`      | Delete a design flow and all of its designs               |
-| `design_list`  | `Web Design/list designs`     | List the designs within a flow                            |
-| `design_read`  | `Web Design/read design`      | Read the HTML content of a design                         |
-| `design_write` | `Web Design/write design`     | Create or overwrite a design (auto-creates its flow)       |
-| `design_delete`| `Web Design/delete design`    | Delete a design                                           |
+| `design_list`  | `Web Design/list designs`     | List the files within a flow                              |
+| `design_read`  | `Web Design/read design`      | Read a text file or base64-encoded asset                  |
+| `design_write` | `Web Design/write design`     | Create or overwrite a flow file (auto-creates its flow)   |
+| `design_delete`| `Web Design/delete design`    | Delete a flow file                                        |
 
 ## Service API
 
@@ -83,7 +84,7 @@ underscores (`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`). A design named `welcome` in a flow 
 ```typescript
 import { WebDesignService } from "@tokenring-ai/web-design";
 
-const webDesignService = agent.requireServiceByType(WebDesignService);
+const webDesignService = agent.requireService(WebDesignService);
 ```
 
 | Method | Description |

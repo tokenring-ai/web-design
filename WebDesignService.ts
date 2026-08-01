@@ -8,15 +8,61 @@ import deepClone from "@tokenring-ai/utility/object/deepClone";
 import { type Design, type DesignSummary, type FlowSummary, type ParsedWebDesignConfig, WebDesignAgentConfigSchema } from "./schema.ts";
 import { WebDesignState } from "./state/WebDesignState.ts";
 
-const NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
-const EXTENSION = ".html";
+const FLOW_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+const FILE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
-function assertValidName(name: string, kind: "flow" | "design"): void {
-  if (!NAME_PATTERN.test(name)) {
+function assertValidFlowName(name: string): void {
+  if (!FLOW_NAME_PATTERN.test(name)) {
+    throw new Error(`Invalid flow name "${name}". Names must start with a letter or number and may only contain letters, numbers, hyphens, and underscores.`);
+  }
+}
+
+function normalizeFileName(name: string): string {
+  if (!FILE_NAME_PATTERN.test(name) || name === "." || name === "..") {
     throw new Error(
-      `Invalid ${kind} name "${name}". Names must start with a letter or number and may only contain letters, numbers, hyphens, and underscores.`,
+      `Invalid file name "${name}". File names must start with a letter or number and may only contain letters, numbers, dots, hyphens, and underscores.`,
     );
   }
+  // Preserve compatibility with the original API, where callers supplied a
+  // design slug and the service added .html.
+  return name.includes(".") ? name : `${name}.html`;
+}
+
+const MIME_TYPES: Record<string, string> = {
+  ".css": "text/css",
+  ".csv": "text/csv",
+  ".gif": "image/gif",
+  ".htm": "text/html",
+  ".html": "text/html",
+  ".ico": "image/x-icon",
+  ".jsx": "text/javascript",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".js": "text/javascript",
+  ".json": "application/json",
+  ".map": "application/json",
+  ".md": "text/markdown",
+  ".mjs": "text/javascript",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".ts": "text/typescript",
+  ".tsx": "text/typescript",
+  ".txt": "text/plain",
+  ".webmanifest": "application/json",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".xml": "application/xml",
+  ".yaml": "text/yaml",
+  ".yml": "text/yaml",
+};
+
+function mimeTypeForFile(fileName: string): string {
+  return MIME_TYPES[path.extname(fileName).toLowerCase()] ?? "application/octet-stream";
+}
+
+function isTextMimeType(mimeType: string): boolean {
+  return mimeType.startsWith("text/") || mimeType === "application/json" || mimeType === "application/xml" || mimeType === "image/svg+xml";
 }
 
 async function pathExists(target: string): Promise<boolean> {
@@ -81,13 +127,12 @@ export default class WebDesignService implements TokenRingService {
   }
 
   private resolveFlowDirectory(root: string, flowName: string): string {
-    assertValidName(flowName, "flow");
+    assertValidFlowName(flowName);
     return path.join(root, flowName);
   }
 
   private resolveDesignPath(root: string, flowName: string, designName: string): string {
-    assertValidName(designName, "design");
-    return path.join(this.resolveFlowDirectory(root, flowName), `${designName}${EXTENSION}`);
+    return path.join(this.resolveFlowDirectory(root, flowName), normalizeFileName(designName));
   }
 
   async listFlows(root: string): Promise<FlowSummary[]> {
@@ -112,8 +157,8 @@ export default class WebDesignService implements TokenRingService {
 
   private async countDesigns(flowDir: string): Promise<number> {
     try {
-      const files = await fs.readdir(flowDir);
-      return files.filter(f => f.endsWith(EXTENSION)).length;
+      const entries = await fs.readdir(flowDir, { withFileTypes: true });
+      return entries.filter(entry => entry.isFile()).length;
     } catch {
       return 0;
     }
@@ -141,19 +186,24 @@ export default class WebDesignService implements TokenRingService {
 
   async listDesigns(root: string, flowName: string): Promise<DesignSummary[]> {
     const flowDir = this.resolveFlowDirectory(root, flowName);
-    let entries: string[];
+    let entries: Dirent[];
     try {
-      entries = await fs.readdir(flowDir);
+      entries = await fs.readdir(flowDir, { withFileTypes: true });
     } catch {
       return [];
     }
 
     const designs: DesignSummary[] = [];
     for (const entry of entries) {
-      if (!entry.endsWith(EXTENSION)) continue;
-      const stat = await fs.stat(path.join(flowDir, entry));
-      if (!stat.isFile()) continue;
-      designs.push({ flowName, name: entry.slice(0, -EXTENSION.length), size: stat.size, updatedAt: stat.mtime.toISOString() });
+      if (!entry.isFile()) continue;
+      const stat = await fs.stat(path.join(flowDir, entry.name));
+      designs.push({
+        flowName,
+        name: entry.name,
+        size: stat.size,
+        mimeType: mimeTypeForFile(entry.name),
+        updatedAt: stat.mtime.toISOString(),
+      });
     }
 
     return designs.sort((a, b) => a.name.localeCompare(b.name));
@@ -161,26 +211,29 @@ export default class WebDesignService implements TokenRingService {
 
   async getDesign(root: string, flowName: string, designName: string): Promise<Design | null> {
     const filePath = this.resolveDesignPath(root, flowName, designName);
+    const fileName = path.basename(filePath);
     let stat: Awaited<ReturnType<typeof fs.stat>>;
     try {
       stat = await fs.stat(filePath);
     } catch {
       return null;
     }
-    const content = await fs.readFile(filePath, "utf-8");
-    return { flowName, name: designName, content, size: stat.size, updatedAt: stat.mtime.toISOString() };
+    const mimeType = mimeTypeForFile(fileName);
+    const encoding = isTextMimeType(mimeType) ? "utf8" : "base64";
+    const content = await fs.readFile(filePath, encoding);
+    return { flowName, name: fileName, content, encoding, mimeType, size: stat.size, updatedAt: stat.mtime.toISOString() };
   }
 
-  async createDesign(root: string, flowName: string, designName: string, content: string): Promise<Design> {
+  async createDesign(root: string, flowName: string, designName: string, content: string, encoding: "utf8" | "base64" = "utf8"): Promise<Design> {
     const filePath = this.resolveDesignPath(root, flowName, designName);
     if (await pathExists(filePath)) {
-      throw new Error(`Design "${designName}" already exists in flow "${flowName}"`);
+      throw new Error(`File "${designName}" already exists in flow "${flowName}"`);
     }
-    return this.writeDesignFile(root, flowName, designName, content);
+    return this.writeDesignFile(root, flowName, designName, content, encoding);
   }
 
-  async updateDesign(root: string, flowName: string, designName: string, content: string): Promise<Design> {
-    return this.writeDesignFile(root, flowName, designName, content);
+  async updateDesign(root: string, flowName: string, designName: string, content: string, encoding: "utf8" | "base64" = "utf8"): Promise<Design> {
+    return this.writeDesignFile(root, flowName, designName, content, encoding);
   }
 
   async deleteDesign(root: string, flowName: string, designName: string): Promise<boolean> {
@@ -193,11 +246,20 @@ export default class WebDesignService implements TokenRingService {
     }
   }
 
-  private async writeDesignFile(root: string, flowName: string, designName: string, content: string): Promise<Design> {
+  private async writeDesignFile(root: string, flowName: string, designName: string, content: string, encoding: "utf8" | "base64"): Promise<Design> {
     const filePath = this.resolveDesignPath(root, flowName, designName);
+    const fileName = path.basename(filePath);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, content, "utf-8");
+    await fs.writeFile(filePath, content, encoding);
     const stat = await fs.stat(filePath);
-    return { flowName, name: designName, content, size: stat.size, updatedAt: stat.mtime.toISOString() };
+    return {
+      flowName,
+      name: fileName,
+      content,
+      encoding,
+      mimeType: mimeTypeForFile(fileName),
+      size: stat.size,
+      updatedAt: stat.mtime.toISOString(),
+    };
   }
 }

@@ -7,17 +7,17 @@ const name = "design_list";
 const displayName = "Web Design/list designs";
 
 async function execute({ flowName }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
-  const webDesignService = agent.requireServiceByType(WebDesignService);
+  const webDesignService = agent.requireService(WebDesignService);
   const directory = webDesignService.getWebDesignDirectory(agent);
   const designs = await webDesignService.listDesigns(directory, flowName);
 
   return {
-    message: `**Web Design** Listed ${designs.length} design${designs.length === 1 ? "" : "s"} in flow "${flowName}"`,
+    message: `**Web Design** Listed ${designs.length} file${designs.length === 1 ? "" : "s"} in flow "${flowName}"`,
     result: JSON.stringify({ designs }),
   };
 }
 
-const description = "List the named HTML designs within a design flow";
+const description = "List the HTML, CSS, JavaScript, and asset files within a design flow";
 
 const inputSchema = z.object({
   flowName: z.string().describe("Name of the flow to list designs from"),

@@ -7,14 +7,14 @@ const name = "design_read";
 const displayName = "Web Design/read design";
 
 async function execute({ flowName, name: designName }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
-  const webDesignService = agent.requireServiceByType(WebDesignService);
+  const webDesignService = agent.requireService(WebDesignService);
   const directory = webDesignService.getWebDesignDirectory(agent);
   const design = await webDesignService.getDesign(directory, flowName, designName);
 
   if (!design) {
     return {
-      message: `**Web Design** Design "${designName}" not found in flow "${flowName}"`,
-      result: JSON.stringify({ error: `Design "${designName}" not found in flow "${flowName}"` }),
+      message: `**Web Design** File "${designName}" not found in flow "${flowName}"`,
+      result: JSON.stringify({ error: `File "${designName}" not found in flow "${flowName}"` }),
     };
   }
 
@@ -24,11 +24,11 @@ async function execute({ flowName, name: designName }: z.output<typeof inputSche
   };
 }
 
-const description = "Read the HTML content of a design within a design flow";
+const description = "Read a text file or base64-encoded binary asset within a design flow";
 
 const inputSchema = z.object({
   flowName: z.string().describe("Name of the flow the design belongs to"),
-  name: z.string().describe("Name of the design to read"),
+  name: z.string().describe("File name to read, including its extension (for example index.html or styles.css)"),
 });
 
 export default {

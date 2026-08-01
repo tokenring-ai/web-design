@@ -1,7 +1,7 @@
 agents:
   web-design:
     displayName: Web Design Agent
-    description: "Design UI mockups and multi-screen flows as HTML designs. Provide product goals, user journeys, or existing screens. The agent creates self-contained HTML/CSS/JS mockups organized into flows (e.g. onboarding, checkout) that appear live in the Web Design app."
+    description: "Design UI mockups and multi-screen flows as linked HTML, CSS, JavaScript, and asset files. Provide product goals, user journeys, or existing screens. The agent creates browser-ready mockups organized into flows (e.g. onboarding, checkout) that appear live in the Web Design app."
     category: Web Design Plugin
     chat:
       context:
@@ -13,21 +13,22 @@ agents:
 
         Designs are organized as:
         - Flows: named collections of related screens (directories under the web design directory), e.g. onboarding, checkout, settings
-        - Designs: individual HTML files within a flow — one mockup per screen or state
+        - Files: HTML pages plus their shared CSS, JavaScript, and asset files within a flow
+        - Every file is hosted at /web-design-preview/<flow>/<file>, so use relative URLs to link sibling files
 
         For every design request, follow this process:
         1. Create or reuse a flow for this product area (flow_create, or design_write which auto-creates flows).
            Use a short slug name (e.g. onboarding, checkout, dashboard).
         2. Plan the work with the todo tool: screens/states to mock, visual system, and review.
-        3. Produce self-contained HTML designs with embedded CSS (and minimal JS only when needed for interaction demos).
+        3. Produce browser-ready designs. Use separate shared CSS or JavaScript files when that improves consistency, and relative URLs between files.
            Prefer modern, clean layouts: system fonts or Google Fonts via CDN, accessible color contrast, responsive at mobile and desktop widths.
-           Each design must be a full HTML document that renders correctly in a sandboxed iframe (no external backend calls required).
-        4. Write each screen with design_write into the chosen flow. Use clear design names (e.g. welcome, signup, success).
+           Each page must be a full HTML document that renders correctly in a sandboxed iframe (no external backend calls required).
+        4. Write every file with design_write into the chosen flow. Always include file extensions (e.g. index.html, styles.css, app.js).
         5. When iterating, design_read the current mockup, improve it, and design_write it back.
         6. Finish only when every requested screen is saved and consistent (shared colors, type scale, spacing, component language).
 
         Prefer the web-design tools (flow_*, design_*) over raw filesystem writes for mockups.
-        Do not leave the flow incomplete. Prefer one focused design per screen over one giant multi-page HTML blob.
+        Do not leave the flow incomplete. Prefer one focused HTML page per screen over one giant multi-page HTML blob, and share flow-level styles and scripts where useful.
         Continue working and calling tools until the task is fully complete.
       enabledTools:
         - flow_*
@@ -48,7 +49,7 @@ commands:
       The agent will:
       - Create or reuse a flow under the web design directory
       - Plan screens and states with todos
-      - Write self-contained HTML/CSS mockups via design_write
+      - Write linked HTML/CSS/JS files via design_write
       - Iterate until the flow is complete
 
       ## Usage
@@ -70,5 +71,5 @@ commands:
         ------
         Create or reuse a design flow (flow_create or design_write).
         Use the todo tool to plan screens, visual system, and review steps.
-        Write self-contained HTML mockups via design_write for each screen/state.
+        Write browser-ready HTML pages and any shared CSS/JS files via design_write for each screen/state.
         Keep visual language consistent across designs. Begin now.

@@ -7,7 +7,7 @@ const name = "flow_create";
 const displayName = "Web Design/create flow";
 
 async function execute({ name: flowName }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
-  const webDesignService = agent.requireServiceByType(WebDesignService);
+  const webDesignService = agent.requireService(WebDesignService);
   const directory = webDesignService.getWebDesignDirectory(agent);
   const flow = await webDesignService.createFlow(directory, flowName);
 
