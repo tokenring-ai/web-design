@@ -2,10 +2,9 @@ import type { Dirent } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type Agent from "@tokenring-ai/agent/Agent";
-import type { AgentCreationContext } from "@tokenring-ai/agent/types";
+import type TokenRingApp from "@tokenring-ai/app";
 import type { TokenRingService } from "@tokenring-ai/app/types";
-import deepClone from "@tokenring-ai/utility/object/deepClone";
-import { type Design, type DesignSummary, type FlowSummary, type ParsedWebDesignConfig, WebDesignAgentConfigSchema } from "./schema.ts";
+import { type Design, type DesignSummary, type FlowSummary, type ParsedWebDesignConfig, WebDesignServiceConfigSchema } from "./schema.ts";
 import { WebDesignState } from "./state/WebDesignState.ts";
 
 const FLOW_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
@@ -76,35 +75,16 @@ export default class WebDesignService implements TokenRingService {
   readonly name = "WebDesignService";
   description = "Figma-style design flows and designs, backed by files on disk";
 
-  private options: ParsedWebDesignConfig | undefined;
+  private options = WebDesignServiceConfigSchema.parse({});
 
-  constructor(options?: ParsedWebDesignConfig) {
-    if (options) this.options = options;
-  }
+  constructor(private app: TokenRingApp) {}
 
   reconfigure(options: ParsedWebDesignConfig): void {
     this.options = options;
   }
 
-  private requireOptions(): ParsedWebDesignConfig {
-    if (!this.options) {
-      throw new Error("WebDesignService is not configured");
-    }
-    return this.options;
-  }
-
-  attach(agent: Agent, creationContext: AgentCreationContext): void {
-    const agentConfig = deepClone(this.requireOptions().agentDefaults, agent.getAgentConfigSlice("webDesign", WebDesignAgentConfigSchema));
-    const initialState = agent.initializeState(WebDesignState, agentConfig);
-    creationContext.items.push(`Web Design Directory: ${initialState.webDesignDirectory}`);
-  }
-
-  getDefaultWebDesignDirectory(): string {
-    return this.requireOptions().agentDefaults.webDesignDirectory;
-  }
-
-  getWebDesignDirectory(agent: Agent): string {
-    return agent.getState(WebDesignState).webDesignDirectory;
+  getWebDesignDirectory(): string {
+    return this.app.getWorkspaceResolvedPath(this.options.webDesignDirectory);
   }
 
   getCurrentDesign(agent: Agent): Design | undefined {
@@ -112,8 +92,7 @@ export default class WebDesignService implements TokenRingService {
   }
 
   async selectDesign(flowName: string, designName: string, agent: Agent): Promise<Design | null> {
-    const directory = this.getWebDesignDirectory(agent);
-    const design = await this.getDesign(directory, flowName, designName);
+    const design = await this.getDesign(flowName, designName);
     agent.mutateState(WebDesignState, state => {
       state.currentDesign = design ?? undefined;
     });
@@ -126,16 +105,17 @@ export default class WebDesignService implements TokenRingService {
     });
   }
 
-  private resolveFlowDirectory(root: string, flowName: string): string {
+  private resolveFlowDirectory(flowName: string): string {
     assertValidFlowName(flowName);
-    return path.join(root, flowName);
+    return path.join(this.getWebDesignDirectory(), flowName);
   }
 
-  private resolveDesignPath(root: string, flowName: string, designName: string): string {
-    return path.join(this.resolveFlowDirectory(root, flowName), normalizeFileName(designName));
+  private resolveDesignPath(flowName: string, designName: string): string {
+    return path.join(this.resolveFlowDirectory(flowName), normalizeFileName(designName));
   }
 
-  async listFlows(root: string): Promise<FlowSummary[]> {
+  async listFlows(): Promise<FlowSummary[]> {
+    const root = this.getWebDesignDirectory();
     let entries: Dirent[];
     try {
       entries = await fs.readdir(root, { withFileTypes: true });
@@ -164,8 +144,8 @@ export default class WebDesignService implements TokenRingService {
     }
   }
 
-  async createFlow(root: string, flowName: string): Promise<FlowSummary> {
-    const flowDir = this.resolveFlowDirectory(root, flowName);
+  async createFlow(flowName: string): Promise<FlowSummary> {
+    const flowDir = this.resolveFlowDirectory(flowName);
     if (await pathExists(flowDir)) {
       throw new Error(`Flow "${flowName}" already exists`);
     }
@@ -174,8 +154,8 @@ export default class WebDesignService implements TokenRingService {
     return { name: flowName, designCount: 0, updatedAt: stat.mtime.toISOString() };
   }
 
-  async deleteFlow(root: string, flowName: string): Promise<boolean> {
-    const flowDir = this.resolveFlowDirectory(root, flowName);
+  async deleteFlow(flowName: string): Promise<boolean> {
+    const flowDir = this.resolveFlowDirectory(flowName);
     try {
       await fs.rm(flowDir, { recursive: true });
       return true;
@@ -184,8 +164,8 @@ export default class WebDesignService implements TokenRingService {
     }
   }
 
-  async listDesigns(root: string, flowName: string): Promise<DesignSummary[]> {
-    const flowDir = this.resolveFlowDirectory(root, flowName);
+  async listDesigns(flowName: string): Promise<DesignSummary[]> {
+    const flowDir = this.resolveFlowDirectory(flowName);
     let entries: Dirent[];
     try {
       entries = await fs.readdir(flowDir, { withFileTypes: true });
@@ -209,8 +189,8 @@ export default class WebDesignService implements TokenRingService {
     return designs.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  async getDesign(root: string, flowName: string, designName: string): Promise<Design | null> {
-    const filePath = this.resolveDesignPath(root, flowName, designName);
+  async getDesign(flowName: string, designName: string): Promise<Design | null> {
+    const filePath = this.resolveDesignPath(flowName, designName);
     const fileName = path.basename(filePath);
     let stat: Awaited<ReturnType<typeof fs.stat>>;
     try {
@@ -224,20 +204,21 @@ export default class WebDesignService implements TokenRingService {
     return { flowName, name: fileName, content, encoding, mimeType, size: stat.size, updatedAt: stat.mtime.toISOString() };
   }
 
-  async createDesign(root: string, flowName: string, designName: string, content: string, encoding: "utf8" | "base64" = "utf8"): Promise<Design> {
-    const filePath = this.resolveDesignPath(root, flowName, designName);
+  async createDesign(flowName: string, designName: string, content: string, encoding: "utf8" | "base64" = "utf8"): Promise<Design> {
+    const filePath = this.resolveDesignPath(flowName, designName);
     if (await pathExists(filePath)) {
       throw new Error(`File "${designName}" already exists in flow "${flowName}"`);
     }
-    return this.writeDesignFile(root, flowName, designName, content, encoding);
+    return this.writeDesignFile(flowName, designName, content, encoding);
   }
 
-  async updateDesign(root: string, flowName: string, designName: string, content: string, encoding: "utf8" | "base64" = "utf8"): Promise<Design> {
-    return this.writeDesignFile(root, flowName, designName, content, encoding);
+  async updateDesign(flowName: string, designName: string, content: string, encoding: "utf8" | "base64" = "utf8"): Promise<Design> {
+    return this.writeDesignFile(flowName, designName, content, encoding);
   }
 
-  async deleteDesign(root: string, flowName: string, designName: string): Promise<boolean> {
-    const filePath = this.resolveDesignPath(root, flowName, designName);
+  async deleteDesign(flowName: string, designName: string): Promise<boolean> {
+    const _root = this.getWebDesignDirectory();
+    const filePath = this.resolveDesignPath(flowName, designName);
     try {
       await fs.unlink(filePath);
       return true;
@@ -246,8 +227,8 @@ export default class WebDesignService implements TokenRingService {
     }
   }
 
-  private async writeDesignFile(root: string, flowName: string, designName: string, content: string, encoding: "utf8" | "base64"): Promise<Design> {
-    const filePath = this.resolveDesignPath(root, flowName, designName);
+  private async writeDesignFile(flowName: string, designName: string, content: string, encoding: "utf8" | "base64"): Promise<Design> {
+    const filePath = this.resolveDesignPath(flowName, designName);
     const fileName = path.basename(filePath);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, content, encoding);

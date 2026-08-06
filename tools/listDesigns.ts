@@ -8,8 +8,7 @@ const displayName = "Web Design/list designs";
 
 async function execute({ flowName }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
   const webDesignService = agent.requireService(WebDesignService);
-  const directory = webDesignService.getWebDesignDirectory(agent);
-  const designs = await webDesignService.listDesigns(directory, flowName);
+  const designs = await webDesignService.listDesigns(flowName);
 
   return {
     message: `**Web Design** Listed ${designs.length} file${designs.length === 1 ? "" : "s"} in flow "${flowName}"`,

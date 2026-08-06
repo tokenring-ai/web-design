@@ -8,8 +8,7 @@ const displayName = "Web Design/write design";
 
 async function execute({ flowName, name: designName, content, encoding }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
   const webDesignService = agent.requireService(WebDesignService);
-  const directory = webDesignService.getWebDesignDirectory(agent);
-  const design = await webDesignService.updateDesign(directory, flowName, designName, content, encoding);
+  const design = await webDesignService.updateDesign(flowName, designName, content, encoding);
 
   return {
     message: `**Web Design** Saved "${flowName}/${designName}"`,

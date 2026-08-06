@@ -8,8 +8,7 @@ const displayName = "Web Design/delete design";
 
 async function execute({ flowName, name: designName }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
   const webDesignService = agent.requireService(WebDesignService);
-  const directory = webDesignService.getWebDesignDirectory(agent);
-  const success = await webDesignService.deleteDesign(directory, flowName, designName);
+  const success = await webDesignService.deleteDesign(flowName, designName);
 
   return {
     message: success ? `**Web Design** Deleted "${flowName}/${designName}"` : `**Web Design** File "${designName}" not found in flow "${flowName}"`,

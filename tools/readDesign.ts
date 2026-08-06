@@ -8,8 +8,7 @@ const displayName = "Web Design/read design";
 
 async function execute({ flowName, name: designName }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
   const webDesignService = agent.requireService(WebDesignService);
-  const directory = webDesignService.getWebDesignDirectory(agent);
-  const design = await webDesignService.getDesign(directory, flowName, designName);
+  const design = await webDesignService.getDesign(flowName, designName);
 
   if (!design) {
     return {

@@ -23,22 +23,14 @@ export const DesignSchema = DesignSummarySchema.extend({
 });
 export type Design = z.output<typeof DesignSchema>;
 
-export const WebDesignAgentConfigSchema = z
-  .object({
-    webDesignDirectory: z.string().exactOptional(),
-  })
-  .prefault({});
-
-export type WebDesignAgentConfig = z.output<typeof WebDesignAgentConfigSchema>;
-
 export const WebDesignServiceConfigSchema = z
   .object({
-    agentDefaults: z
-      .object({
-        webDesignDirectory: z.string().meta({ description: "Directory where design flows are stored" } satisfies ConfigFieldMeta),
-      })
-      .meta({ label: "Agent Defaults" } satisfies ConfigFieldMeta),
+    webDesignDirectory: z
+      .string()
+      .default("web-design")
+      .meta({ description: "Directory where design flows are stored" } satisfies ConfigFieldMeta),
   })
+  .prefault({})
   .meta({ label: "Web Design", description: "Figma-style design flows and designs, backed by files on disk" } satisfies ConfigFieldMeta);
 
 export type WebDesignServiceConfig = z.input<typeof WebDesignServiceConfigSchema>;
