@@ -2,7 +2,6 @@ import type { TokenRingPlugin } from "@tokenring-ai/app";
 import { ChatService } from "@tokenring-ai/chat";
 import { AgentLifecycleService } from "@tokenring-ai/lifecycle";
 import { RpcService } from "@tokenring-ai/rpc";
-import { StaticResource, WebHostService } from "@tokenring-ai/web-host";
 import { z } from "zod";
 import config from "./config/index.ts";
 import addSelectedDesign from "./hooks/addSelectedDesign.ts";
@@ -31,22 +30,7 @@ export default {
     });
   },
   reconfigure(app, config) {
-    const webDesignService = app.requireService(WebDesignService);
-    webDesignService.reconfigure(config.webDesign);
-
-    //TODO this should be hoisted in to WebDesignService.reconfigure() and reconciled against an object tracking the web design directory
-    app.requireService(WebHostService).registerResource(
-      "Web Design Previews",
-      new StaticResource({
-        root: webDesignService.getWebDesignDirectory(),
-        prefix: "/web-design-preview",
-        headers: {
-          "Cache-Control": "no-store",
-          "Content-Security-Policy": "sandbox allow-scripts",
-          "X-Content-Type-Options": "nosniff",
-        },
-      }),
-    );
+    app.requireService(WebDesignService).reconfigure(config.webDesign);
   },
   config,
   configSchema: packageConfigSchema,

@@ -29,6 +29,10 @@ export const WebDesignServiceConfigSchema = z
       .string()
       .default("web-design")
       .meta({ description: "Directory where design flows are stored" } satisfies ConfigFieldMeta),
+    agentTypes: z
+      .array(z.string())
+      .default(["web-design"])
+      .meta({ description: "The available agent types that can be used for web design" } satisfies ConfigFieldMeta),
   })
   .prefault({})
   .meta({ label: "Web Design", description: "Figma-style design flows and designs, backed by files on disk" } satisfies ConfigFieldMeta);

@@ -1,4 +1,4 @@
-import { AfterInputReceived } from "@tokenring-ai/agent";
+import { BeforeInputReceived } from "@tokenring-ai/agent";
 import type Agent from "@tokenring-ai/agent/Agent";
 import type { SupportedMimeTypes } from "@tokenring-ai/agent/AgentEvents";
 import type { HookSubscription } from "@tokenring-ai/lifecycle/types";
@@ -35,7 +35,7 @@ function supportedAttachmentMimeType(mimeType: string, isText: boolean): Support
   }
 }
 
-async function addSelectedDesign(data: AfterInputReceived, agent: Agent) {
+async function addSelectedDesign(data: BeforeInputReceived, agent: Agent) {
   const attachments = (data.input.attachments ??= []);
   agent.mutateState(WebDesignState, state => {
     if (!state.currentDesign) return;
@@ -56,7 +56,7 @@ async function addSelectedDesign(data: AfterInputReceived, agent: Agent) {
   });
 }
 
-const callbacks = [new HookCallback(AfterInputReceived, addSelectedDesign)];
+const callbacks = [new HookCallback(BeforeInputReceived, addSelectedDesign)];
 
 export default {
   name,

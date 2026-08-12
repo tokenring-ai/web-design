@@ -9,15 +9,16 @@ The `@tokenring-ai/web-design` package provides a simple two-level file store fo
 - A **Flow** is a named collection of related pages and assets (e.g. an onboarding flow or checkout flow).
 - A flow may contain HTML, CSS, JavaScript, images, fonts, and other browser assets.
 
-Files in a flow are hosted together at `/web-design-preview/<flow>/<file>`, so pages can link sibling files with
-ordinary relative URLs. Text files can be viewed and edited directly in the Web Design app; arbitrary files can be
-uploaded as flow assets.
+Files in a flow are hosted via the workspace filesystem HTTP endpoint at
+`/api/fs/posix/<webDesignDirectory>/<flow>/<file>`, so pages can link sibling files with ordinary relative URLs.
+Text files can be viewed and edited directly in the Web Design app; arbitrary files can be uploaded as flow assets.
+Previews load in a sandboxed iframe in the Web Design app.
 
 ## Key Features
 
 - **Multi-file Flows**: HTML, CSS, JavaScript, images, fonts, and other files are stored as `<webDesignDirectory>/<flow>/<file>`
-- **Hosted Previews**: Flow files are served from `/web-design-preview/<flow>/<file>` with browser sandbox headers
-- **Shared or Per-Agent Directory**: One configured root directory by default, with optional per-agent overrides
+- **Hosted Previews**: Flow files are served from `/api/fs/{provider}/<webDesignDirectory>/<flow>/<file>` (filesystem HTTP)
+- **Configurable Directory**: One workspace-relative root directory for all design flows
 - **CRUD via RPC**: List, create, retrieve, update, and delete flows and designs from the frontend
 - **CRUD via Tools**: Agents can list, read, write, and delete flows and designs while doing frontend work
 - **Live List Updates**: `streamFlows` / `streamDesigns` poll the directory so the frontend list stays current
@@ -35,8 +36,7 @@ Configure the web design plugin in your application config:
 
 ```yaml
 webDesign:
-  agentDefaults:
-    webDesignDirectory: ./.tokenring/web-design
+  webDesignDirectory: ./.tokenring/web-design
 ```
 
 ### Configuration Schema
@@ -44,20 +44,19 @@ webDesign:
 ```typescript
 import { WebDesignServiceConfigSchema } from "@tokenring-ai/web-design";
 
-WebDesignServiceConfigSchema = z.object({
-  agentDefaults: z.object({
-    webDesignDirectory: z.string(),
-  }),
-});
+// Flat config object (no agentDefaults wrapper):
+// z.object({
+//   webDesignDirectory: z.string().default("web-design"),
+// })
 ```
 
 **Configuration Options:**
 
-| Field                              | Type     | Required | Description                        |
-|-------------------------------------|----------|----------|-------------------------------------|
-| `agentDefaults.webDesignDirectory`  | `string` | Yes      | Directory where design flows are stored |
+| Field                 | Type     | Required | Default       | Description                                    |
+|-----------------------|----------|----------|---------------|------------------------------------------------|
+| `webDesignDirectory`  | `string` | No       | `web-design`  | Directory where design flows are stored        |
 
-Agents may override `webDesignDirectory` via their own `webDesign.webDesignDirectory` agent config slice.
+The path is resolved relative to the application workspace directory.
 
 ## Naming
 
@@ -89,22 +88,26 @@ const webDesignService = agent.requireService(WebDesignService);
 
 | Method | Description |
 |--------|-------------|
-| `getDefaultWebDesignDirectory()` | Return the application default web design directory |
-| `getWebDesignDirectory(agent)` | Return the active agent's web design directory |
-| `listFlows(root)` | List flow summaries (`name`, `designCount`, `updatedAt`) |
-| `createFlow(root, flowName)` | Create a new, empty flow; throws if the name is already in use |
-| `deleteFlow(root, flowName)` | Delete a flow and all of its designs; returns `false` if it didn't exist |
-| `listDesigns(root, flowName)` | List design summaries (`flowName`, `name`, `size`, `updatedAt`) within a flow |
-| `getDesign(root, flowName, name)` | Read a design's content, or `null` if it doesn't exist |
-| `createDesign(root, flowName, name, content)` | Create a new design, auto-creating its flow; throws if the name is already in use |
-| `updateDesign(root, flowName, name, content)` | Create or overwrite a design, auto-creating its flow |
-| `deleteDesign(root, flowName, name)` | Delete a design; returns `false` if it didn't exist |
+| `getAgentTypes()` | Return configured agent types available for web design |
+| `getWebDesignDirectory()` | Return the configured web design directory (workspace-resolved) |
+| `listFlows()` | List flow summaries (`name`, `designCount`, `updatedAt`) |
+| `createFlow(flowName)` | Create a new, empty flow; throws if the name is already in use |
+| `deleteFlow(flowName)` | Delete a flow and all of its designs; returns `false` if it didn't exist |
+| `listDesigns(flowName)` | List design summaries (`flowName`, `name`, `size`, `mimeType`, `updatedAt`) within a flow |
+| `getDesign(flowName, name)` | Read a design's content, or `null` if it doesn't exist |
+| `createDesign(flowName, name, content, encoding?)` | Create a new design, auto-creating its flow; throws if the name is already in use |
+| `updateDesign(flowName, name, content, encoding?)` | Create or overwrite a design, auto-creating its flow |
+| `deleteDesign(flowName, name)` | Delete a design; returns `false` if it didn't exist |
+| `selectDesign(flowName, name, agent)` | Load a design into agent state |
+| `getCurrentDesign(agent)` | Return the agent's currently selected design |
+| `clearCurrentDesign(agent)` | Clear the agent's currently selected design |
 
 ## RPC
 
-The plugin registers a `Web Design RPC` endpoint at `/rpc/web-design` with `listFlows`, `streamFlows`, `createFlow`,
-`deleteFlow`, `listDesigns`, `streamDesigns`, `getDesign`, `createDesign`, `updateDesign`, and `deleteDesign`
-methods, used by the Web Design app in the frontend.
+The plugin registers a `Web Design RPC` endpoint at `/rpc/web-design` with `getWebDesignConfiguration`,
+`listFlows`, `streamFlows`, `createFlow`, `deleteFlow`, `listDesigns`, `streamDesigns`, `getDesign`,
+`createDesign`, `updateDesign`, and `deleteDesign` methods, used by the Web Design app in the frontend.
+`getWebDesignConfiguration` returns `{ agentTypes: string[] }` from plugin config (default `["web-design"]`).
 
 ## Related Packages
 

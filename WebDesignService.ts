@@ -79,8 +79,22 @@ export default class WebDesignService implements TokenRingService {
 
   constructor(private app: TokenRingApp) {}
 
+  attach(agent: Agent): void {
+    agent.initializeState(WebDesignState, {});
+  }
+
   reconfigure(options: ParsedWebDesignConfig): void {
     this.options = options;
+  }
+
+  /** Agent types configured for web design (from WebDesignServiceConfigSchema.agentTypes). */
+  getAgentTypes(): string[] {
+    return [...this.options.agentTypes];
+  }
+
+  /** Configured directory name relative to the workspace (e.g. `web-design`). */
+  getWebDesignDirectoryName(): string {
+    return this.options.webDesignDirectory;
   }
 
   getWebDesignDirectory(): string {
@@ -217,7 +231,6 @@ export default class WebDesignService implements TokenRingService {
   }
 
   async deleteDesign(flowName: string, designName: string): Promise<boolean> {
-    const _root = this.getWebDesignDirectory();
     const filePath = this.resolveDesignPath(flowName, designName);
     try {
       await fs.unlink(filePath);

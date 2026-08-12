@@ -29,6 +29,14 @@ const streamDesigns = createPollingQueryStream({
 });
 
 export default createRPCEndpoint(WebDesignRpcSchema, {
+  getWebDesignConfiguration(_args, app: TokenRingApp) {
+    const webDesignService = app.requireService(WebDesignService);
+
+    return {
+      agentTypes: webDesignService.getAgentTypes(),
+    };
+  },
+
   async listFlows(args, app: TokenRingApp) {
     return projectFlows(args, app);
   },

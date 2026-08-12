@@ -37,6 +37,6 @@ export class WebDesignState extends AgentStateSlice<typeof serializationSchema> 
   show(): string {
     const current = this.currentDesign ? `${this.currentDesign.flowName}/${this.currentDesign.name}` : "None";
     return `Current Design: ${current}
-    Last Attached Design ID: ${this.lastAttachedDesignId ?? "None"}`;
+Last Attached Design ID: ${this.lastAttachedDesignId ?? "None"}`;
   }
 }

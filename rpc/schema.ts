@@ -7,6 +7,13 @@ export default {
   name: "Web Design RPC",
   path: "/rpc/web-design",
   methods: {
+    getWebDesignConfiguration: {
+      type: "query",
+      input: z.object({}),
+      result: z.object({
+        agentTypes: z.array(z.string()),
+      }),
+    },
     listFlows: {
       type: "query",
       input: z.object({}),

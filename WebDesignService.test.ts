@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import createTestingApp from "@tokenring-ai/app/test/createTestingApp.test";
+import { WebDesignServiceConfigSchema } from "./schema.ts";
 import WebDesignService from "./WebDesignService.ts";
 
 describe("WebDesignService", () => {
@@ -21,8 +22,10 @@ describe("WebDesignService", () => {
     tempDirs.length = 0;
   });
 
-  function makeService(_webDesignDirectory: string): WebDesignService {
-    return new WebDesignService(createTestingApp());
+  function makeService(webDesignDirectory: string): WebDesignService {
+    const service = new WebDesignService(createTestingApp());
+    service.reconfigure(WebDesignServiceConfigSchema.parse({ webDesignDirectory }));
+    return service;
   }
 
   test("listFlows returns an empty array when the directory doesn't exist", async () => {
@@ -36,7 +39,7 @@ describe("WebDesignService", () => {
 
     const flow = await service.createFlow("onboarding");
     expect(flow).toMatchObject({ name: "onboarding", designCount: 0 });
-    expect(fs.existsSync(path.join("onboarding"))).toBe(true);
+    expect(fs.existsSync(path.join(dir, "onboarding"))).toBe(true);
   });
 
   test("createFlow throws when the flow already exists", async () => {
@@ -53,7 +56,7 @@ describe("WebDesignService", () => {
 
     const created = await service.createDesign("onboarding", "welcome", "<h1>Hello</h1>");
     expect(created).toMatchObject({ flowName: "onboarding", name: "welcome.html", content: "<h1>Hello</h1>", mimeType: "text/html", encoding: "utf8" });
-    expect(fs.existsSync(path.join("onboarding", "welcome.html"))).toBe(true);
+    expect(fs.existsSync(path.join(dir, "onboarding", "welcome.html"))).toBe(true);
 
     const fetched = await service.getDesign("onboarding", "welcome");
     expect(fetched?.content).toBe("<h1>Hello</h1>");
@@ -94,7 +97,7 @@ describe("WebDesignService", () => {
     await service.createDesign("flow", "a", "a");
     await service.createDesign("flow", "b", "b");
     expect(await service.deleteFlow("flow")).toBe(true);
-    expect(fs.existsSync(path.join("flow"))).toBe(false);
+    expect(fs.existsSync(path.join(dir, "flow"))).toBe(false);
     expect(await service.deleteFlow("flow")).toBe(false);
   });
 
@@ -104,7 +107,7 @@ describe("WebDesignService", () => {
 
     await service.createDesign("flow", "b-page", "b");
     await service.createDesign("flow", "a-page", "a");
-    fs.writeFileSync(path.join("flow", "notes.txt"), "supporting content");
+    fs.writeFileSync(path.join(dir, "flow", "notes.txt"), "supporting content");
 
     const flows = await service.listFlows();
     expect(flows).toEqual([expect.objectContaining({ name: "flow", designCount: 3 })]);
@@ -122,8 +125,8 @@ describe("WebDesignService", () => {
     await service.createDesign("site", "styles.css", "body { color: rebeccapurple; }");
     await service.createDesign("site", "pixel.png", Buffer.from([0, 1, 2, 3]).toString("base64"), "base64");
 
-    expect(fs.readFileSync(path.join("site", "styles.css"), "utf8")).toContain("rebeccapurple");
-    expect([...fs.readFileSync(path.join("site", "pixel.png"))]).toEqual([0, 1, 2, 3]);
+    expect(fs.readFileSync(path.join(dir, "site", "styles.css"), "utf8")).toContain("rebeccapurple");
+    expect([...fs.readFileSync(path.join(dir, "site", "pixel.png"))]).toEqual([0, 1, 2, 3]);
     expect(await service.getDesign("site", "pixel.png")).toMatchObject({
       name: "pixel.png",
       encoding: "base64",

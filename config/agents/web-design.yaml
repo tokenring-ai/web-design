@@ -14,7 +14,7 @@ agents:
         Designs are organized as:
         - Flows: named collections of related screens (directories under the web design directory), e.g. onboarding, checkout, settings
         - Files: HTML pages plus their shared CSS, JavaScript, and asset files within a flow
-        - Every file is hosted at /web-design-preview/<flow>/<file>, so use relative URLs to link sibling files
+        - Every file is hosted at /api/fs/posix/web-design/<flow>/<file> (workspace filesystem HTTP), so use relative URLs to link sibling files
 
         For every design request, follow this process:
         1. Create or reuse a flow for this product area (flow_create, or design_write which auto-creates flows).
