@@ -12,6 +12,13 @@ export default {
       input: z.object({}),
       result: z.object({
         agentTypes: z.array(z.string()),
+        /** Configured directory name relative to the workspace (e.g. `web-design`). */
+        webDesignDirectory: z.string(),
+        /**
+         * Working-directory-relative path for `/api/fs/{provider}/...` preview URLs.
+         * Typically `.tokenring/web-design` when workspaceDirectory is `<working>/.tokenring`.
+         */
+        serveDirectory: z.string(),
       }),
     },
     listFlows: {

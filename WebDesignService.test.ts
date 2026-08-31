@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import TokenRingApp from "@tokenring-ai/app";
 import createTestingApp from "@tokenring-ai/app/test/createTestingApp.test";
 import { WebDesignServiceConfigSchema } from "./schema.ts";
 import WebDesignService from "./WebDesignService.ts";
@@ -117,6 +118,24 @@ describe("WebDesignService", () => {
     expect(designs.find(d => d.name === "notes.txt")?.mimeType).toBe("text/plain");
   });
 
+  test("listFlows and listDesigns skip hidden and invalid names", async () => {
+    const dir = tempDir();
+    const service = makeService(dir);
+
+    await service.createDesign("valid-flow", "index.html", "<h1>ok</h1>");
+    fs.mkdirSync(path.join(dir, ".hidden"));
+    fs.mkdirSync(path.join(dir, "has space"));
+    fs.writeFileSync(path.join(dir, "valid-flow", ".DS_Store"), "junk");
+    fs.writeFileSync(path.join(dir, "valid-flow", "notes.txt"), "ok");
+
+    const flows = await service.listFlows();
+    expect(flows.map(f => f.name)).toEqual(["valid-flow"]);
+    expect(flows[0]?.designCount).toBe(2);
+
+    const designs = await service.listDesigns("valid-flow");
+    expect(designs.map(d => d.name)).toEqual(["index.html", "notes.txt"]);
+  });
+
   test("stores linked text and binary assets with their original file names", async () => {
     const dir = tempDir();
     const service = makeService(dir);
@@ -133,6 +152,44 @@ describe("WebDesignService", () => {
       mimeType: "image/png",
       content: Buffer.from([0, 1, 2, 3]).toString("base64"),
     });
+  });
+
+  test("getServeDirectory is working-directory-relative so /api/fs can host previews", () => {
+    const working = tempDir();
+    const workspace = path.join(working, ".tokenring");
+    fs.mkdirSync(workspace);
+    const app = new TokenRingApp({
+      app: {
+        workingDirectory: working,
+        workspaceDirectory: workspace,
+        configDirectories: [],
+        shutdownMonitorIntervalMs: 2000,
+        serviceRestartDelayMs: 5000,
+        printLogs: false,
+      },
+    });
+    const service = new WebDesignService(app);
+    service.reconfigure(WebDesignServiceConfigSchema.parse({ webDesignDirectory: "web-design" }));
+
+    expect(service.getServeDirectory()).toBe(".tokenring/web-design");
+  });
+
+  test("getServeDirectory throws when the design directory is outside the working directory", () => {
+    const working = tempDir();
+    const outsideWorkspace = tempDir();
+    const app = new TokenRingApp({
+      app: {
+        workingDirectory: working,
+        workspaceDirectory: outsideWorkspace,
+        configDirectories: [],
+        shutdownMonitorIntervalMs: 2000,
+        serviceRestartDelayMs: 5000,
+        printLogs: false,
+      },
+    });
+    const service = new WebDesignService(app);
+    service.reconfigure(WebDesignServiceConfigSchema.parse({ webDesignDirectory: "web-design" }));
+    expect(() => service.getServeDirectory()).toThrow(/outside the working directory/);
   });
 
   test("rejects invalid flow and design names", async () => {

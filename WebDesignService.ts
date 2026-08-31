@@ -101,6 +101,25 @@ export default class WebDesignService implements TokenRingService {
     return this.app.getWorkspaceResolvedPath(this.options.webDesignDirectory);
   }
 
+  /**
+   * Path to the web-design directory relative to the working directory.
+   * Used for `/api/fs/{provider}/...` preview URLs (posix is rooted at the working directory).
+   * Typically `.tokenring/web-design` when workspaceDirectory is `<working>/.tokenring`.
+   */
+  getServeDirectory(): string {
+    const absolute = this.getWebDesignDirectory();
+    const relative = path.relative(this.app.appConfig.workingDirectory, absolute);
+    if (!relative || relative === ".") {
+      throw new Error(`Web design directory resolves to the working directory root; set webDesign.webDesignDirectory to a subdirectory`);
+    }
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new Error(
+        `Web design directory "${absolute}" is outside the working directory "${this.app.appConfig.workingDirectory}" and cannot be served via /api/fs`,
+      );
+    }
+    return relative.split(path.sep).join("/");
+  }
+
   getCurrentDesign(agent: Agent): Design | undefined {
     return agent.getState(WebDesignState).currentDesign;
   }
@@ -139,7 +158,7 @@ export default class WebDesignService implements TokenRingService {
 
     const flows: FlowSummary[] = [];
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
+      if (!entry.isDirectory() || !FLOW_NAME_PATTERN.test(entry.name)) continue;
       const flowDir = path.join(root, entry.name);
       const stat = await fs.stat(flowDir);
       const designCount = await this.countDesigns(flowDir);
@@ -152,7 +171,7 @@ export default class WebDesignService implements TokenRingService {
   private async countDesigns(flowDir: string): Promise<number> {
     try {
       const entries = await fs.readdir(flowDir, { withFileTypes: true });
-      return entries.filter(entry => entry.isFile()).length;
+      return entries.filter(entry => entry.isFile() && FILE_NAME_PATTERN.test(entry.name)).length;
     } catch {
       return 0;
     }
@@ -173,8 +192,9 @@ export default class WebDesignService implements TokenRingService {
     try {
       await fs.rm(flowDir, { recursive: true });
       return true;
-    } catch {
-      return false;
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
     }
   }
 
@@ -189,7 +209,7 @@ export default class WebDesignService implements TokenRingService {
 
     const designs: DesignSummary[] = [];
     for (const entry of entries) {
-      if (!entry.isFile()) continue;
+      if (!entry.isFile() || !FILE_NAME_PATTERN.test(entry.name)) continue;
       const stat = await fs.stat(path.join(flowDir, entry.name));
       designs.push({
         flowName,
@@ -235,8 +255,9 @@ export default class WebDesignService implements TokenRingService {
     try {
       await fs.unlink(filePath);
       return true;
-    } catch {
-      return false;
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
     }
   }
 

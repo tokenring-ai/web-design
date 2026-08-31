@@ -34,6 +34,8 @@ export default createRPCEndpoint(WebDesignRpcSchema, {
 
     return {
       agentTypes: webDesignService.getAgentTypes(),
+      webDesignDirectory: webDesignService.getWebDesignDirectoryName(),
+      serveDirectory: webDesignService.getServeDirectory(),
     };
   },
 

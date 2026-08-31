@@ -21,7 +21,7 @@ export default {
   version: packageJSON.version,
   description: packageJSON.description,
   install(app) {
-    app.addService(new WebDesignService(app));
+    app.addService(WebDesignService, new WebDesignService(app));
 
     app.waitForService(AgentLifecycleService, lifecycleService => lifecycleService.addHooks(addSelectedDesign));
     app.waitForService(ChatService, chatService => chatService.addTools(tools));
