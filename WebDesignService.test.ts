@@ -154,7 +154,7 @@ describe("WebDesignService", () => {
     });
   });
 
-  test("getServeDirectory is working-directory-relative so /api/fs can host previews", () => {
+  test("getServeDirectory is workspace-relative so /api/fs can host previews", () => {
     const working = tempDir();
     const workspace = path.join(working, ".tokenring");
     fs.mkdirSync(workspace);
@@ -171,16 +171,17 @@ describe("WebDesignService", () => {
     const service = new WebDesignService(app);
     service.reconfigure(WebDesignServiceConfigSchema.parse({ webDesignDirectory: "web-design" }));
 
-    expect(service.getServeDirectory()).toBe(".tokenring/web-design");
+    expect(service.getServeDirectory()).toBe("web-design");
   });
 
-  test("getServeDirectory throws when the design directory is outside the working directory", () => {
+  test("getServeDirectory throws when the design directory is outside the workspace directory", () => {
     const working = tempDir();
-    const outsideWorkspace = tempDir();
+    const workspace = path.join(working, ".tokenring");
+    fs.mkdirSync(workspace);
     const app = new TokenRingApp({
       app: {
         workingDirectory: working,
-        workspaceDirectory: outsideWorkspace,
+        workspaceDirectory: workspace,
         configDirectories: [],
         shutdownMonitorIntervalMs: 2000,
         serviceRestartDelayMs: 5000,
@@ -188,8 +189,9 @@ describe("WebDesignService", () => {
       },
     });
     const service = new WebDesignService(app);
-    service.reconfigure(WebDesignServiceConfigSchema.parse({ webDesignDirectory: "web-design" }));
-    expect(() => service.getServeDirectory()).toThrow(/outside the working directory/);
+    // An absolute directory outside the workspace cannot be served via /api/fs.
+    service.reconfigure(WebDesignServiceConfigSchema.parse({ webDesignDirectory: tempDir() }));
+    expect(() => service.getServeDirectory()).toThrow(/outside the workspace directory/);
   });
 
   test("rejects invalid flow and design names", async () => {

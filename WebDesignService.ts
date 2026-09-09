@@ -102,19 +102,19 @@ export default class WebDesignService implements TokenRingService {
   }
 
   /**
-   * Path to the web-design directory relative to the working directory.
-   * Used for `/api/fs/{provider}/...` preview URLs (posix is rooted at the working directory).
-   * Typically `.tokenring/web-design` when workspaceDirectory is `<working>/.tokenring`.
+   * Path to the web-design directory relative to the WORKSPACE directory.
+   * `/api/fs/{provider}/...` resolves relative paths against the workspace
+   * directory. Typically `web-design`.
    */
   getServeDirectory(): string {
     const absolute = this.getWebDesignDirectory();
-    const relative = path.relative(this.app.appConfig.workingDirectory, absolute);
+    const relative = path.relative(this.app.appConfig.workspaceDirectory, absolute);
     if (!relative || relative === ".") {
-      throw new Error(`Web design directory resolves to the working directory root; set webDesign.webDesignDirectory to a subdirectory`);
+      throw new Error(`Web design directory resolves to the workspace directory root; set webDesign.webDesignDirectory to a subdirectory`);
     }
     if (relative.startsWith("..") || path.isAbsolute(relative)) {
       throw new Error(
-        `Web design directory "${absolute}" is outside the working directory "${this.app.appConfig.workingDirectory}" and cannot be served via /api/fs`,
+        `Web design directory "${absolute}" is outside the workspace directory "${this.app.appConfig.workspaceDirectory}" and cannot be served via /api/fs`,
       );
     }
     return relative.split(path.sep).join("/");
