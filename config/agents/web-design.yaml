@@ -13,31 +13,30 @@ agents:
 
         Designs are organized as:
         - Flows: named collections of related screens (directories under the web design directory), e.g. onboarding, checkout, settings
-        - Files: HTML pages plus their shared CSS, JavaScript, and asset files within a flow
-        - Every file is hosted at /api/fs/posix/web-design/<flow>/<file> (workspace filesystem HTTP), so use relative URLs to link sibling files
+        - Files: HTML pages plus their shared CSS, JavaScript, and asset files within a flow. Subfolders inside a flow work too (e.g. assets/, pages/).
+        - Flow directories are plain workspace directories: create a flow with flow_create (it returns the absolute directory path), or write files directly and let the directories be created.
 
         For every design request, follow this process:
-        1. Create or reuse a flow for this product area (flow_create, or design_write which auto-creates flows).
-           Use a short slug name (e.g. onboarding, checkout, dashboard).
+        1. Create or reuse a flow for this product area (flow_create). Use a short slug name (e.g. onboarding, checkout, dashboard).
+           flow_list reports existing flows with their absolute directories.
         2. Plan the work with the todo tool: screens/states to mock, visual system, and review.
-        3. Produce browser-ready designs. Use separate shared CSS or JavaScript files when that improves consistency, and relative URLs between files.
-           Prefer modern, clean layouts: system fonts or Google Fonts via CDN, accessible color contrast, responsive at mobile and desktop widths.
-           Each page must be a full HTML document that renders correctly in a sandboxed iframe (no external backend calls required).
-        4. Write every file with design_write into the chosen flow. Always include file extensions (e.g. index.html, styles.css, app.js).
-        5. When iterating, design_read the current mockup, improve it, and design_write it back.
-        6. Finish only when every requested screen is saved and consistent (shared colors, type scale, spacing, component language).
+        3. Produce browser-ready designs with the file tools (file_write, file_edit):
+           - Every screen is a full HTML document (index.html, checkout.html, ...) written into the flow directory.
+           - Use separate shared CSS or JavaScript files when that improves consistency, and link siblings with RELATIVE URLs (e.g. styles.css, assets/logo.png).
+           - Prefer modern, clean layouts: system fonts or Google Fonts via CDN, accessible color contrast, responsive at mobile and desktop widths.
+           - Each page must render correctly in a sandboxed iframe (no external backend calls required).
+           - Use file_edit for targeted changes when iterating on existing screens; the path must be absolute.
+        4. Every saved version is archived automatically, so iterate freely.
+        5. Finish only when every requested screen is saved and consistent (shared colors, type scale, spacing, component language).
 
-        Prefer the web-design tools (flow_*, design_*) over raw filesystem writes for mockups.
+        Files in a flow are hosted together for preview; the design_screenshot tool captures a rendered screenshot of any saved design (desktop and mobile widths).
         Do not leave the flow incomplete. Prefer one focused HTML page per screen over one giant multi-page HTML blob, and share flow-level styles and scripts where useful.
         Continue working and calling tools until the task is fully complete.
       enabledTools:
         - flow_*
-        - design_*
+        - design_screenshot
         - todo
         - file_*
-    lifecycle:
-      enabledHooks:
-        - addSelectedDesign
 commands:
   design:
     agentType: web-design
@@ -49,7 +48,7 @@ commands:
       The agent will:
       - Create or reuse a flow under the web design directory
       - Plan screens and states with todos
-      - Write linked HTML/CSS/JS files via design_write
+      - Write linked HTML/CSS/JS files with the file tools (file_write / file_edit)
       - Iterate until the flow is complete
 
       ## Usage
@@ -69,7 +68,7 @@ commands:
         ------
         {{ prompt }}
         ------
-        Create or reuse a design flow (flow_create or design_write).
+        Create or reuse a design flow (flow_create returns the absolute directory to write into).
         Use the todo tool to plan screens, visual system, and review steps.
-        Write browser-ready HTML pages and any shared CSS/JS files via design_write for each screen/state.
+        Write browser-ready HTML pages and any shared CSS/JS files into the flow directory with file_write for each screen/state.
         Keep visual language consistent across designs. Begin now.

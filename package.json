@@ -24,10 +24,13 @@
   "dependencies": {
     "@tokenring-ai/agent": "workspace:*",
     "@tokenring-ai/app": "workspace:*",
+    "@tokenring-ai/browser": "workspace:*",
     "@tokenring-ai/chat": "workspace:*",
-    "@tokenring-ai/lifecycle": "workspace:*",
+    "@tokenring-ai/filesystem": "workspace:*",
+    "@tokenring-ai/one-frontend": "workspace:*",
     "@tokenring-ai/rpc": "workspace:*",
     "@tokenring-ai/utility": "workspace:*",
+    "@tokenring-ai/web-host": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -35,6 +38,7 @@
   },
   "exports": {
     ".": "./index.ts",
+    "./frontend/*": "./frontend/*",
     "./*": "./*.ts",
     "./rpc/schema": "./rpc/schema.ts"
   }

@@ -16,7 +16,9 @@ async function execute(_input: z.output<typeof inputSchema>, agent: Agent): Prom
   };
 }
 
-const description = "List the design flows (collections of related designs) in the web design directory";
+const description =
+  "List the design flows (collections of related designs) in the web design directory. " +
+  "Each flow reports the absolute directory its files live in — write designs there with the file tools.";
 
 const inputSchema = z.object({});
 

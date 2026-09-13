@@ -15,13 +15,17 @@ Files in a flow are hosted via the workspace filesystem HTTP endpoint at `/api/f
 
 - **Multi-file Flows**: HTML, CSS, JavaScript, images, fonts, and other files are stored as `<webDesignDirectory>/<flow>/<file>`
 - **Hosted Previews**: Flow files are served via the workspace filesystem HTTP endpoint so pages and assets are hosted together under one URL prefix
+- **Sandboxed Live Previews**: HTML renders in the app exactly as authored, inside a sandboxed iframe (scripts run in an opaque origin); device-width presets cover mobile/tablet/desktop
+- **Visual Feedback Loop**: `design_screenshot` renders a saved design in a headless browser and returns the image plus console errors to the agent
+- **Version History**: Every overwrite snapshots the previous content under `<flow>/.history/` (up to 50 versions), browsable and restorable in the app
+- **Element Annotations**: Click any element in the preview to leave a comment that is written into the HTML source as a comment anchored to that element, with click-to-locate in the editor
+- **Explicit Attachments**: Designs are attached to agent chat only when the user attaches them (paperclip in the editor header or per file row)
 - **Configurable Directory**: One workspace-relative root directory for all design flows
 - **CRUD via RPC**: List, create, retrieve, update, and delete flows and designs from the frontend
 - **CRUD via Tools**: Agents can list, read, write, and delete flows and designs while doing frontend work
 - **Live List Updates**: `streamFlows` / `streamDesigns` poll the directory so the frontend list stays current
 - **Auto-vivified Flows**: Writing a design to a flow that doesn't exist yet creates the flow automatically
-- **Web Design Agent**: Ships a `web-design` agent type and `/design` command for UI mockup work
-- **Selected Design Attachments**: A lifecycle hook automatically attaches the selected design to new chat messages
+- **Web Design Agents**: Ships `web-design` and `web-design-visual` agent types plus `/design` and `/design-visual` commands for UI mockup work
 
 ## Installation
 
@@ -31,9 +35,10 @@ bun add @tokenring-ai/web-design
 
 ## Chat Commands
 
-| Command    | Description                                    |
-|------------|------------------------------------------------|
-| `/design`  | Design HTML UI mockups organized into flows    |
+| Command          | Description                                            |
+|------------------|--------------------------------------------------------|
+| `/design`        | Design HTML UI mockups organized into flows            |
+| `/design-visual` | Same, with mandatory screenshot-based visual self-review |
 
 The `/design` command starts a web design run that writes HTML mockups into design flows. The agent will:
 
@@ -42,12 +47,16 @@ The `/design` command starts a web design run that writes HTML mockups into desi
 - Write linked HTML/CSS/JS files via `design_write`
 - Iterate until the flow is complete
 
-When run on a web-design agent, work continues in the foreground on that agent. When run from another
+The `/design-visual` command routes to the `web-design-visual` agent type, which additionally captures every
+screen with `design_screenshot` at desktop and mobile widths after writing it, reviews the image and console
+output, and iterates until each screen is clean.
+
+When run on a matching web-design agent, work continues in the foreground on that agent. When run from another
 agent type, a background web-design agent is started.
 
 ## Tools
 
-The package registers seven tools with the `ChatService`:
+The package registers eight tools with the `ChatService`:
 
 | Tool            | Display Name                 | Description                                      |
 |-----------------|------------------------------|--------------------------------------------------|
@@ -58,6 +67,7 @@ The package registers seven tools with the `ChatService`:
 | `design_read`   | `Web Design/read design`     | Read a text file or base64-encoded binary asset within a design flow |
 | `design_write`  | `Web Design/write design`    | Create or overwrite a text file within a design flow. Files in the same flow are hosted together, so HTML can link to sibling CSS and JavaScript files with relative URLs. The flow is created automatically if it doesn't already exist. |
 | `design_delete` | `Web Design/delete design`   | Delete a file from a design flow |
+| `design_screenshot` | `Web Design/screenshot design` | Capture a screenshot of a saved design in a headless browser and return it as an image with console errors |
 
 ### Tool Input Parameters
 
@@ -100,7 +110,8 @@ No input parameters.
 | `encoding` | `string` | How content is encoded (`"utf8"` or `"base64"`, default `"utf8"`)                                      |
 
 The tool writes through `updateDesign` (create or overwrite). Its result returns the saved file metadata
-(`flowName`, `name`, `size`, `updatedAt`) but not the `content` field.
+(`flowName`, `name`, `size`, `updatedAt`) but not the `content` field. Each overwrite snapshots the previous
+content into the flow's history (tagged with source `agent`).
 
 #### `design_delete`
 
@@ -108,6 +119,21 @@ The tool writes through `updateDesign` (create or overwrite). Its result returns
 |------------|----------|------------------------------------------|
 | `flowName` | `string` | Name of the flow the design belongs to   |
 | `name`     | `string` | File name to delete, including its extension |
+
+#### `design_screenshot`
+
+| Parameter  | Type      | Description                                                                              |
+|------------|-----------|------------------------------------------------------------------------------------------|
+| `flowName` | `string`  | Name of the flow the design belongs to                                                    |
+| `name`     | `string`  | Design file name to capture (for example index.html)                                      |
+| `width`    | `integer` | Optional viewport width in CSS pixels (e.g. `375` for mobile, `1280` for desktop)         |
+| `height`   | `integer` | Optional viewport height in CSS pixels                                                    |
+
+The tool navigates a browser session to the token-gated preview URL for the saved design, resizes when
+`width`/`height` are provided, and captures a PNG. The result carries the image as a `sendToLLM` attachment
+plus the viewport size and any console errors/warnings the page produced since navigation. Requires the
+`@tokenring-ai/browser` plugin (installed by default); headless capture in Docker uses the `chromium` package
+with the browser plugin's `chrome` backend.
 
 ### Config-Defined Tool
 
@@ -130,14 +156,17 @@ webDesign:
   webDesignDirectory: ./.tokenring/web-design
   agentTypes:
     - web-design
+    - web-design-visual
 ```
 
 ### Configuration Options
 
-| Field                 | Type       | Required | Default          | Description                                    |
-|-----------------------|------------|----------|------------------|------------------------------------------------|
-| `webDesignDirectory`  | `string`   | No       | `"web-design"`   | Directory where design flows are stored        |
-| `agentTypes`          | `string[]` | No       | `["web-design"]` | The available agent types that can be used for web design |
+| Field                 | Type       | Required | Default                                  | Description                                    |
+|-----------------------|------------|----------|------------------------------------------|------------------------------------------------|
+| `webDesignDirectory`  | `string`   | No       | `"web-design"`                           | Directory where design flows are stored        |
+| `fsProvider`          | `string`   | No       | `"posix"`                                | Filesystem provider used in `/api/fs` preview URLs for design files |
+| `previewBaseUrl`      | `string`   | No       | _(running web host URL)_                 | Base URL agents use to open hosted design previews (used by `design_screenshot`) |
+| `agentTypes`          | `string[]` | No       | `["web-design", "web-design-visual"]`    | The available agent types that can be used for web design |
 
 The `webDesignDirectory` path is resolved relative to the application workspace directory.
 
@@ -151,19 +180,19 @@ The `WebDesignServiceConfigSchema` includes `.meta()` annotations for configurat
 
 ### Agent Types
 
-The plugin ships a `web-design` agent type via `config/agents/web-design.yaml`:
+The plugin ships two agent types via `config/agents/`:
 
-| Field          | Value                                                                                 |
-|----------------|---------------------------------------------------------------------------------------|
-| Agent type     | `web-design`                                                                          |
-| Display name   | `Web Design Agent`                                                                    |
-| Category       | `Web Design Plugin`                                                                   |
-| Description    | Design UI mockups and multi-screen flows as linked HTML, CSS, JavaScript, and asset files. Provide product goals, user journeys, or existing screens. The agent creates browser-ready mockups organized into flows (e.g. onboarding, checkout) that appear live in the Web Design app. |
-| Enabled tools  | `flow_*`, `design_*`, `todo`, `file_*`                                                |
-| Enabled hooks  | `addSelectedDesign`                                                                   |
+| Field          | `web-design`                                                                          | `web-design-visual`                                                                                     |
+|----------------|----------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| Display name   | `Web Design Agent`                                                                     | `Visual Web Design Agent`                                                                                 |
+| Category       | `Web Design Plugin`                                                                    | `Web Design Plugin`                                                                                       |
+| Description    | Design UI mockups and multi-screen flows as linked HTML, CSS, JavaScript, and asset files. | Same, with screenshot-based visual self-review of every screen.                                           |
+| Enabled tools  | `flow_*`, `design_*`, `todo`, `file_*`                                                 | `flow_*`, `design_*`, `todo`, `file_*`                                                                    |
+| Drives command | `/design`                                                                              | `/design-visual`                                                                                          |
 
-It drives the `/design` chat command and is returned by `getAgentTypes()` from the configured
-`agentTypes` field.
+The visual agent's system prompt additionally mandates the review loop: after writing each screen, capture it
+with `design_screenshot` at desktop and mobile widths, inspect spacing/contrast/hierarchy, read console errors,
+and iterate until clean before finishing.
 
 ## Naming
 
@@ -208,8 +237,13 @@ const webDesignService = agent.requireService(WebDesignService);
 | `listDesigns(flowName)` | List design summaries (`flowName`, `name`, `size`, `mimeType`, `updatedAt`) within a flow, sorted by name |
 | `getDesign(flowName, designName)` | Read a design's content, or `null` if it doesn't exist; text files are returned UTF-8, binary files base64 |
 | `createDesign(flowName, designName, content, encoding?)` | Create a new design, auto-creating its flow; throws if the name is already in use |
-| `updateDesign(flowName, designName, content, encoding?)` | Create or overwrite a design, auto-creating its flow |
+| `updateDesign(flowName, designName, content, encoding?, source?)` | Create or overwrite a design, auto-creating its flow; overwrites first snapshot the previous content into history (source: `"user"` or `"agent"`) |
 | `deleteDesign(flowName, designName)` | Delete a design; returns `false` if it didn't exist |
+| `listDesignHistory(flowName, designName)` | List history snapshots for a design (newest first) |
+| `getDesignVersion(flowName, designName, versionId)` | Read one history snapshot's content, or `null` if missing |
+| `getFsProvider()` | Return the filesystem provider used in `/api/fs` preview URLs |
+| `getPreviewBaseUrl()` | Return the configured preview base URL, if any |
+| `getPreviewToken()` / `verifyPreviewToken(token)` | Per-boot token gating the `/api/web-design/preview` HTTP resource |
 
 `encoding` defaults to `"utf8"` on `createDesign` / `updateDesign`.
 
@@ -226,7 +260,6 @@ const state = agent.getState(WebDesignState);
 | Property                 | Type                          | Description                                                          |
 |--------------------------|-------------------------------|----------------------------------------------------------------------|
 | `currentDesign`          | `Design \| undefined`         | The currently selected design                                        |
-| `lastAttachedDesignId`   | `string \| undefined`         | ID of the last design attached to chat (prevents duplicate attachments) |
 
 #### State Inheritance
 
@@ -235,10 +268,10 @@ parent's `currentDesign` if the child does not already have one.
 
 #### State Serialization
 
-- `serialize()` — Returns `{ currentDesign?, lastAttachedDesignId? }`
+- `serialize()` — Returns `{ currentDesign? }`
 - `deserialize(data)` — Restores all properties from serialized data
 - `show()` — Returns a human-readable summary string
-  (`Current Design: <flowName>/<designName>` and `Last Attached Design ID: <id>`, or `None`)
+  (`Current Design: <flowName>/<designName>`, or `None`)
 
 ## Services
 
@@ -258,34 +291,16 @@ app.addService(new WebDesignService(app));
 
 ## Lifecycle Hooks
 
-The package registers one lifecycle hook via `AgentLifecycleService`.
+None. (Designs are attached to agent chat explicitly by the user in the Web Design app; the former
+`addSelectedDesign` auto-attach hook was removed.)
 
-### addSelectedDesign
+## Preview HTTP Resource
 
-- **Name**: `addSelectedDesign`
-- **Display Name**: `Web Design/Add currently selected design to chat`
-- **Description**: Attaches the currently selected design file to the chat message
-- **Triggered by**: `BeforeInputReceived`
-
-When a user sends a new message, this hook checks the agent's `WebDesignState.currentDesign`. If a design
-is selected and has not already been attached (tracked via `lastAttachedDesignId`), it appends an
-attachment to the message:
-
-```typescript
-{
-  name: "<flowName>/<designName>",
-  description: "This is the currently selected file from the web design flow.",
-  encoding: currentDesign.encoding === "utf8" ? "text" : "base64",
-  mimeType, // supported attachment mime types; text falls back to "text/plain",
-            // unsupported binary mime types are skipped
-  body: currentDesign.content,
-}
-```
-
-The attachment ID is `<flowName>/<designName>`; each design is attached at most once per agent. The hook
-is enabled for the `web-design` agent type out of the box and can be toggled per agent through
-`AgentLifecycleService` (`enableHooks` / `disableHooks` / `setEnabledHooks` with the hook name
-`"addSelectedDesign"`).
+The plugin registers a `Web Design Preview` web resource at `/api/web-design/preview/:flow/:file?token=…`
+via `WebHostService`. It serves saved design files without the user's `/api/fs` credentials so local render
+targets (headless browser captures) can load them. Access is gated by a per-boot random token held by
+`WebDesignService`; agents receive ready-made URLs from the `design_screenshot` tool and never handle the
+token themselves.
 
 ## RPC
 
@@ -293,7 +308,7 @@ The plugin registers a `Web Design RPC` endpoint at `/rpc/web-design`:
 
 | Method                       | Type      | Description                                                                 |
 |------------------------------|-----------|-----------------------------------------------------------------------------|
-| `getWebDesignConfiguration`  | query     | Get web design configuration (`agentTypes`)                                 |
+| `getWebDesignConfiguration`  | query     | Get web design configuration (`agentTypes`, `webDesignDirectory`, `serveDirectory`, `fsProvider`, `previewBaseUrl`) |
 | `listFlows`                  | query     | List all flows                                                              |
 | `streamFlows`                | stream    | Polling stream of flows (3s interval)                                       |
 | `createFlow`                 | mutation  | Create a new flow                                                           |
@@ -302,8 +317,10 @@ The plugin registers a `Web Design RPC` endpoint at `/rpc/web-design`:
 | `streamDesigns`              | stream    | Polling stream of designs (3s interval)                                     |
 | `getDesign`                  | query     | Read a design's content                                                     |
 | `createDesign`               | mutation  | Create a new design (`content` defaults to `""`)                            |
-| `updateDesign`               | mutation  | Create or overwrite a design                                                |
+| `updateDesign`               | mutation  | Create or overwrite a design (optional `source`: `"user"` or `"agent"`, stored on the auto-created history snapshot) |
 | `deleteDesign`               | mutation  | Delete a design                                                            |
+| `listDesignHistory`          | query     | List history snapshots for a design (newest first)                          |
+| `getDesignVersion`           | query     | Read one history snapshot's content, or `null`                              |
 | `getWebDesignState`          | query     | Get an agent's currently selected flow and design                          |
 | `updateWebDesignState`       | mutation  | Set an agent's currently selected flow and design                          |
 
@@ -330,26 +347,30 @@ the directory every 3 seconds, yielding updated flow or design lists.
 
 ## Dependencies
 
-| Package                   | Purpose                                                    |
-|---------------------------|------------------------------------------------------------|
-| `@tokenring-ai/agent`     | Agent state management and lifecycle hook types            |
-| `@tokenring-ai/app`       | Plugin and service interfaces, `TokenRingApp`, config metadata |
-| `@tokenring-ai/chat`      | Tool registration with `ChatService`                       |
-| `@tokenring-ai/lifecycle` | Lifecycle hook registration                                |
-| `@tokenring-ai/rpc`       | RPC endpoint and polling stream utilities                  |
-| `@tokenring-ai/utility`   | Deep clone utility for config merging                      |
-| `zod`                     | Schema validation                                          |
+| Package                    | Purpose                                                    |
+|----------------------------|------------------------------------------------------------|
+| `@tokenring-ai/agent`      | Agent state management                                     |
+| `@tokenring-ai/app`        | Plugin and service interfaces, `TokenRingApp`, config metadata |
+| `@tokenring-ai/browser`    | Headless browser sessions for `design_screenshot`          |
+| `@tokenring-ai/chat`       | Tool registration with `ChatService`                       |
+| `@tokenring-ai/rpc`        | RPC endpoint and polling stream utilities                  |
+| `@tokenring-ai/utility`    | Deep clone utility for config merging                      |
+| `@tokenring-ai/web-host`   | Preview HTTP resource registration, web host URL           |
+| `zod`                      | Schema validation                                          |
 
 ## Testing
 
-Tests use `bun test` and are located in `WebDesignService.test.ts`:
+Tests use `bun test` and are located in `WebDesignService.test.ts`, `tools/screenshotDesign.test.ts`, and
+`frontend/lib/designAnnotations.test.ts`:
 
 ```bash
 bun test
 ```
 
 The test suite covers flow and design CRUD, flow auto-creation on write, duplicate detection, binary and
-text assets, name validation (including path traversal rejection), and directory listing behavior.
+text assets, name validation (including path traversal rejection), directory listing behavior, the screenshot
+tool (URL construction, viewport resize, console reporting, attachments), and the annotation
+comment format (parse, insert, reply, resolve, delete, element round-trip).
 
 ## License
 

@@ -1,7 +1,7 @@
 import type { RPCSchema } from "@tokenring-ai/rpc/types";
 import { AgentNotFoundSchema, SuccessSchema } from "@tokenring-ai/rpc/types";
 import { z } from "zod";
-import { DesignSchema, DesignSummarySchema, FlowSummarySchema } from "../schema.ts";
+import { DesignSchema, DesignSummarySchema, DesignVersionSummarySchema, FlowSummarySchema } from "../schema.ts";
 
 export default {
   name: "Web Design RPC",
@@ -19,6 +19,10 @@ export default {
          * Typically `.tokenring/web-design` when workspaceDirectory is `<working>/.tokenring`.
          */
         serveDirectory: z.string(),
+        /** Filesystem provider used in `/api/fs/{provider}/...` preview URLs. */
+        fsProvider: z.string(),
+        /** Base URL agents use to open hosted design previews; null means "derive from the web host". */
+        previewBaseUrl: z.string().nullable(),
       }),
     },
     listFlows: {
@@ -113,6 +117,35 @@ export default {
       }),
       result: z.object({
         success: z.boolean(),
+      }),
+    },
+    listDesignHistory: {
+      type: "query",
+      input: z.object({
+        flowName: z.string(),
+        name: z.string(),
+      }),
+      result: z.object({
+        versions: z.array(DesignVersionSummarySchema),
+      }),
+    },
+    getDesignVersion: {
+      type: "query",
+      input: z.object({
+        flowName: z.string(),
+        name: z.string(),
+        versionId: z.string(),
+      }),
+      result: z.object({
+        version: z
+          .object({
+            id: z.string(),
+            createdAt: z.string(),
+            content: z.string(),
+            encoding: z.enum(["utf8", "base64"]),
+            mimeType: z.string(),
+          })
+          .nullable(),
       }),
     },
     getWebDesignState: {

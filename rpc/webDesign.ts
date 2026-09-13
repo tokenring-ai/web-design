@@ -2,29 +2,51 @@ import { AgentManager } from "@tokenring-ai/agent";
 import type TokenRingApp from "@tokenring-ai/app";
 import { createPollingQueryStream } from "@tokenring-ai/rpc/createPollingQueryStream";
 import { createRPCEndpoint } from "@tokenring-ai/rpc/createRPCEndpoint";
+import type { DesignSummary, FlowSummary } from "../schema.ts";
 import { WebDesignState } from "../state/WebDesignState.ts";
 import WebDesignService from "../WebDesignService.ts";
+import { getDesignRevision } from "./revision.ts";
 import WebDesignRpcSchema from "./schema.ts";
 
+/**
+ * Stream pollers tick frequently but rescan the directory only when the design
+ * revision changed (a write landed under the design directory), so updates
+ * arrive promptly without periodic filesystem scans.
+ */
+const STREAM_INTERVAL_MS = 500;
+
 async function projectFlows(_args: Record<string, never>, app: TokenRingApp) {
+  const revision = getDesignRevision();
+  const cache = flowListCache;
+  if (cache && cache.revision === revision) return cache.payload;
+
   const webDesignService = app.requireService(WebDesignService);
-  const flows = await webDesignService.listFlows();
-  return { flows };
+  const payload = { flows: await webDesignService.listFlows() };
+  flowListCache = { revision, payload };
+  return payload;
 }
 
+let flowListCache: { revision: number; payload: { flows: FlowSummary[] } } | null = null;
+const designListCaches = new Map<string, { revision: number; payload: { designs: DesignSummary[] } }>();
+
 async function projectDesigns(args: { flowName: string }, app: TokenRingApp) {
+  const revision = getDesignRevision();
+  const cache = designListCaches.get(args.flowName);
+  if (cache && cache.revision === revision) return cache.payload;
+
   const webDesignService = app.requireService(WebDesignService);
-  const designs = await webDesignService.listDesigns(args.flowName);
-  return { designs };
+  const payload = { designs: await webDesignService.listDesigns(args.flowName) };
+  designListCaches.set(args.flowName, { revision, payload });
+  return payload;
 }
 
 const streamFlows = createPollingQueryStream({
-  intervalMs: 3000,
+  intervalMs: STREAM_INTERVAL_MS,
   poll: projectFlows,
 });
 
 const streamDesigns = createPollingQueryStream({
-  intervalMs: 3000,
+  intervalMs: STREAM_INTERVAL_MS,
   poll: projectDesigns,
 });
 
@@ -36,6 +58,8 @@ export default createRPCEndpoint(WebDesignRpcSchema, {
       agentTypes: webDesignService.getAgentTypes(),
       webDesignDirectory: webDesignService.getWebDesignDirectoryName(),
       serveDirectory: webDesignService.getServeDirectory(),
+      fsProvider: webDesignService.getFsProvider(),
+      previewBaseUrl: webDesignService.getPreviewBaseUrl() ?? null,
     };
   },
 
@@ -85,6 +109,18 @@ export default createRPCEndpoint(WebDesignRpcSchema, {
     const webDesignService = app.requireService(WebDesignService);
     const success = await webDesignService.deleteDesign(args.flowName, args.name);
     return { success };
+  },
+
+  async listDesignHistory(args, app: TokenRingApp) {
+    const webDesignService = app.requireService(WebDesignService);
+    const versions = await webDesignService.listDesignHistory(args.flowName, args.name);
+    return { versions };
+  },
+
+  async getDesignVersion(args, app: TokenRingApp) {
+    const webDesignService = app.requireService(WebDesignService);
+    const version = await webDesignService.getDesignVersion(args.flowName, args.name, args.versionId);
+    return { version };
   },
 
   getWebDesignState(args, app: TokenRingApp) {
