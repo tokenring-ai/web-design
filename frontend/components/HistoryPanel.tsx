@@ -1,6 +1,8 @@
 import { DiffEditor } from "@monaco-editor/react";
+import SectionLabel from "@tokenring-ai/one-frontend/components/ui/SectionLabel.tsx";
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
 import { useDesignHistory, webDesignRPCClient } from "@tokenring-ai/one-frontend/rpc.ts";
+import { defineMonacoThemes, monacoThemeName } from "@tokenring-ai/one-frontend/theme/bridges/monaco.ts";
 import formatError from "@tokenring-ai/utility/error/formatError";
 import { Columns2, History, Loader2, RotateCcw, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -84,7 +86,7 @@ export default function HistoryPanel({
     >
       <div className="shrink-0 px-3 py-2 border-b border-primary flex items-center gap-2">
         <History className="w-3.5 h-3.5 text-muted" />
-        <span className="text-xs font-bold text-muted uppercase tracking-widest flex-1 min-w-0 truncate">History — {designName}</span>
+        <SectionLabel className="flex-1 min-w-0 truncate">History — {designName}</SectionLabel>
         <button
           type="button"
           onClick={onClose}
@@ -118,7 +120,8 @@ export default function HistoryPanel({
               original={comparison.original}
               modified={currentContent}
               language={language}
-              theme={theme === "light" ? "vs-light" : "vs-dark"}
+              beforeMount={defineMonacoThemes}
+              theme={monacoThemeName(theme === "dark" ? "dark" : "light")}
               options={{
                 readOnly: true,
                 renderSideBySide: true,

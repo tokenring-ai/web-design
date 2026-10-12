@@ -1,6 +1,7 @@
 import type Agent from "@tokenring-ai/agent/Agent";
 import type { TokenRingToolDefinition, TokenRingToolResult } from "@tokenring-ai/chat/schema";
 import { z } from "zod";
+import { CURRENT_DESIGN_CONTEXT } from "../contextHandlers/currentDesign.ts";
 import WebDesignService from "../WebDesignService.ts";
 
 const name = "flow_create";
@@ -32,6 +33,7 @@ export default {
   name,
   displayName,
   description,
+  requiredContextHandlers: [CURRENT_DESIGN_CONTEXT],
   inputSchema,
   execute,
 } satisfies TokenRingToolDefinition<typeof inputSchema>;

@@ -6,6 +6,7 @@ import { RpcService } from "@tokenring-ai/rpc";
 import { WebHostService } from "@tokenring-ai/web-host";
 import { z } from "zod";
 import config from "./config/index.ts";
+import currentDesignContext, { CURRENT_DESIGN_CONTEXT } from "./contextHandlers/currentDesign.ts";
 import packageJSON from "./package.json" with { type: "json" };
 import { bumpDesignRevision } from "./rpc/revision.ts";
 import webDesignRPC from "./rpc/webDesign.ts";
@@ -27,7 +28,10 @@ export default {
     const webDesignService = new WebDesignService(app);
     app.addService(WebDesignService, webDesignService);
 
-    app.waitForService(ChatService, chatService => chatService.addTools(tools));
+    app.waitForService(ChatService, chatService => {
+      chatService.addTools(tools);
+      chatService.registerContextHandler(CURRENT_DESIGN_CONTEXT, currentDesignContext);
+    });
     app.waitForService(RpcService, rpcService => {
       rpcService.registerEndpoint(webDesignRPC);
     });

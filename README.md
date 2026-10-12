@@ -19,6 +19,9 @@ Files in a flow are hosted via the workspace filesystem HTTP endpoint at `/api/f
 - **Visual Feedback Loop**: `design_screenshot` renders a saved design in a headless browser and returns the image plus console errors to the agent
 - **Version History**: Every overwrite snapshots the previous content under `<flow>/.history/` (up to 50 versions), browsable and restorable in the app
 - **Element Annotations**: Click any element in the preview to leave a comment that is written into the HTML source as a comment anchored to that element, with click-to-locate in the editor
+- **Rename, Duplicate, Export**: Flows and files can be renamed (open panels, drafts and the URL follow), duplicated, and a whole flow downloaded as a `.zip`
+- **Screenshots from the App**: "Capture screenshot" in the preview header runs the `design_screenshot` capture server-side, saves the PNG under the flow's `screenshots/` folder and offers it for download
+- **Current Design Context**: The design open in the app becomes the attached agent's current design, named in its context
 - **Explicit Attachments**: Designs are attached to agent chat only when the user attaches them (paperclip in the editor header or per file row)
 - **Configurable Directory**: One workspace-relative root directory for all design flows
 - **CRUD via RPC**: List, create, retrieve, update, and delete flows and designs from the frontend
@@ -166,6 +169,7 @@ webDesign:
 | `webDesignDirectory`  | `string`   | No       | `"web-design"`                           | Directory where design flows are stored        |
 | `fsProvider`          | `string`   | No       | `"posix"`                                | Filesystem provider used in `/api/fs` preview URLs for design files |
 | `previewBaseUrl`      | `string`   | No       | _(running web host URL)_                 | Base URL agents use to open hosted design previews (used by `design_screenshot`) |
+| `screenshotProfile`   | `string`   | No       | `"default"`                              | Browser profile used for screenshots captured from the Web Design app (`captureDesignScreenshot` RPC) |
 | `agentTypes`          | `string[]` | No       | `["web-design", "web-design-visual"]`    | The available agent types that can be used for web design |
 
 The `webDesignDirectory` path is resolved relative to the application workspace directory.
@@ -234,11 +238,17 @@ const webDesignService = agent.requireService(WebDesignService);
 | `listFlows()` | List flow summaries (`name`, `designCount`, `updatedAt`), sorted by name |
 | `createFlow(flowName)` | Create a new, empty flow; throws if the name is already in use |
 | `deleteFlow(flowName)` | Delete a flow and all of its designs; returns `false` if it didn't exist |
+| `renameFlow(flowName, newFlowName)` | Rename a flow directory; throws if the target exists or the source is missing |
+| `duplicateFlow(flowName, newFlowName)` | Copy every design file of a flow (dot-directories skipped) to a new flow; throws on collision |
+| `exportFlowArchive(flowName)` | Build a ZIP of the flow (entries under `<flow>/`) and return `{ fileName, data, fileCount }` |
 | `listDesigns(flowName)` | List design summaries (`flowName`, `name`, `size`, `mimeType`, `updatedAt`) within a flow, sorted by name |
 | `getDesign(flowName, designName)` | Read a design's content, or `null` if it doesn't exist; text files are returned UTF-8, binary files base64 |
 | `createDesign(flowName, designName, content, encoding?)` | Create a new design, auto-creating its flow; throws if the name is already in use |
 | `updateDesign(flowName, designName, content, encoding?, source?)` | Create or overwrite a design, auto-creating its flow; overwrites first snapshot the previous content into history (source: `"user"` or `"agent"`) |
 | `deleteDesign(flowName, designName)` | Delete a design; returns `false` if it didn't exist |
+| `renameDesign(flowName, designName, newFlowName, newDesignName)` | Move a design to a new name and/or flow; refuses to overwrite. Version history stays keyed to the old path |
+| `duplicateDesign(flowName, designName, newFlowName, newDesignName)` | Copy a design to a new name and/or flow; refuses to overwrite |
+| `captureScreenshot(flowName, designName, { width?, height?, save? })` | Screenshot a saved design in a throwaway browser session (same capture as `design_screenshot`); unless `save: false`, store the PNG at `screenshots/<name>-<w>x<h>-<timestamp>.png` in the flow |
 | `listDesignHistory(flowName, designName)` | List history snapshots for a design (newest first) |
 | `getDesignVersion(flowName, designName, versionId)` | Read one history snapshot's content, or `null` if missing |
 | `getFsProvider()` | Return the filesystem provider used in `/api/fs` preview URLs |
@@ -259,7 +269,12 @@ const state = agent.getState(WebDesignState);
 
 | Property                 | Type                          | Description                                                          |
 |--------------------------|-------------------------------|----------------------------------------------------------------------|
-| `currentDesign`          | `Design \| undefined`         | The currently selected design                                        |
+| `currentDesign`          | `Design \| undefined`         | The design the user has open in the Web Design app (stored without its `content`) |
+
+The Web Design navigator calls `updateWebDesignState` whenever the open design or the attached agent
+changes. The `web-design-current-design` context handler (required by the `flow_list`, `flow_create` and
+`design_screenshot` tools, so it reaches every design agent via `tool-context`) tells the agent which file is
+open and its absolute path, so "this page" resolves without naming the file.
 
 #### State Inheritance
 
@@ -313,12 +328,18 @@ The plugin registers a `Web Design RPC` endpoint at `/rpc/web-design`:
 | `streamFlows`                | stream    | Polling stream of flows (3s interval)                                       |
 | `createFlow`                 | mutation  | Create a new flow                                                           |
 | `deleteFlow`                 | mutation  | Delete a flow and its designs                                               |
+| `renameFlow`                 | mutation  | Rename a flow (`name`, `newName`); refuses an existing target               |
+| `duplicateFlow`              | mutation  | Copy a flow to `newName`; refuses an existing target                        |
+| `exportFlow`                 | query     | The whole flow as a base64 ZIP (`fileName`, `mimeType`, `content`, `fileCount`) |
 | `listDesigns`                | query     | List designs within a flow                                                  |
 | `streamDesigns`              | stream    | Polling stream of designs (3s interval)                                     |
 | `getDesign`                  | query     | Read a design's content                                                     |
 | `createDesign`               | mutation  | Create a new design (`content` defaults to `""`)                            |
 | `updateDesign`               | mutation  | Create or overwrite a design (optional `source`: `"user"` or `"agent"`, stored on the auto-created history snapshot) |
 | `deleteDesign`               | mutation  | Delete a design                                                            |
+| `renameDesign`               | mutation  | Move a design to `newName` (and optionally `newFlowName`); refuses to overwrite |
+| `duplicateDesign`            | mutation  | Copy a design to `newName` (and optionally `newFlowName`); refuses to overwrite |
+| `captureDesignScreenshot`    | mutation  | Screenshot a saved design (`width`/`height` optional, `save` default true); returns the base64 PNG, `savedAs`, viewport and console report |
 | `listDesignHistory`          | query     | List history snapshots for a design (newest first)                          |
 | `getDesignVersion`           | query     | Read one history snapshot's content, or `null`                              |
 | `getWebDesignState`          | query     | Get an agent's currently selected flow and design                          |
@@ -337,8 +358,8 @@ write methods default `encoding` to `"utf8"`.
 | `"success"`       | `selectedFlowName: string \| null`, `selectedDesignName: string \| null`    | Agent found and state returned                 |
 | `"agentNotFound"` | _(none)_                                                                    | The specified `agentId` does not match an active agent |
 
-`updateWebDesignState` selects a design only when both `selectedFlowName` and `selectedDesignName` are
-provided; otherwise it returns the current selection unchanged.
+`updateWebDesignState` selects a design when both `selectedFlowName` and `selectedDesignName` are
+provided, clears the selection when either is `null`, and otherwise returns the current selection unchanged.
 
 ### Streaming Methods
 
@@ -360,7 +381,9 @@ the directory every 3 seconds, yielding updated flow or design lists.
 
 ## Testing
 
-Tests use `bun test` and are located in `WebDesignService.test.ts`, `tools/screenshotDesign.test.ts`, and
+Tests use `bun test` and are located in `WebDesignService.test.ts`, `WebDesignService.manage.test.ts`
+(rename, duplicate, ZIP export, screenshot capture, current-design context), `tools/screenshotDesign.test.ts`,
+`frontend/views/webDesign.test.tsx`, and
 `frontend/lib/designAnnotations.test.ts`:
 
 ```bash

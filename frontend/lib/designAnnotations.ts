@@ -49,7 +49,7 @@ export function parseAnnotations(html: string): DesignAnnotation[] {
       text,
       replies,
       resolved: Boolean(resolvedFlag),
-      line: html.slice(0, match.index ?? 0).split("\n").length,
+      line: html.slice(0, match.index).split("\n").length,
     });
   }
   return annotations;

@@ -5,7 +5,9 @@ import path from "node:path";
 import type Agent from "@tokenring-ai/agent/Agent";
 import type TokenRingApp from "@tokenring-ai/app";
 import type { TokenRingService } from "@tokenring-ai/app/types";
+import { BrowserService } from "@tokenring-ai/browser";
 import FileSystemService from "@tokenring-ai/filesystem/FileSystemService";
+import { WebHostService } from "@tokenring-ai/web-host";
 import {
   type Design,
   type DesignSummary,
@@ -14,7 +16,9 @@ import {
   type ParsedWebDesignConfig,
   WebDesignServiceConfigSchema,
 } from "./schema.ts";
+import { captureDesignScreenshot, type DesignScreenshot, screenshotFileName } from "./screenshot/captureDesignScreenshot.ts";
 import { WebDesignState } from "./state/WebDesignState.ts";
+import { createZip, type ZipEntry } from "./zip.ts";
 
 const FLOW_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 /** One path segment of a design file name (flows may contain nested paths). */
@@ -168,7 +172,9 @@ export default class WebDesignService implements TokenRingService {
   async selectDesign(flowName: string, designName: string, agent: Agent): Promise<Design | null> {
     const design = await this.getDesign(flowName, designName);
     agent.mutateState(WebDesignState, state => {
-      state.currentDesign = design ?? undefined;
+      // Only the reference matters (the context handler names the path and the
+      // agent reads fresh content), so the body is not copied into checkpoints.
+      state.currentDesign = design ? { ...design, content: "" } : undefined;
     });
     return design;
   }
@@ -247,6 +253,57 @@ export default class WebDesignService implements TokenRingService {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
       throw error;
     }
+  }
+
+  /**
+   * Renames a flow directory. Refuses to overwrite an existing flow. Version
+   * history is keyed by path, so archived versions stay with the old name.
+   */
+  async renameFlow(flowName: string, newFlowName: string): Promise<FlowSummary> {
+    const source = this.resolveFlowDirectory(flowName);
+    const target = this.resolveFlowDirectory(newFlowName);
+    if (flowName === newFlowName) throw new Error(`Flow "${flowName}" already has that name`);
+    if (!(await pathExists(source))) throw new Error(`Flow "${flowName}" does not exist`);
+    if (await pathExists(target)) throw new Error(`Flow "${newFlowName}" already exists`);
+    await fs.rename(source, target);
+    return this.flowSummary(newFlowName);
+  }
+
+  /** Copies a flow (every design file; dot-directories such as editor state are skipped) under a new name. */
+  async duplicateFlow(flowName: string, newFlowName: string): Promise<FlowSummary> {
+    const source = this.resolveFlowDirectory(flowName);
+    const target = this.resolveFlowDirectory(newFlowName);
+    if (!(await pathExists(source))) throw new Error(`Flow "${flowName}" does not exist`);
+    if (await pathExists(target)) throw new Error(`Flow "${newFlowName}" already exists`);
+    await fs.mkdir(target, { recursive: true });
+    for (const [absolutePath, relativeName] of await this.walkDesignFiles(source, source)) {
+      const destination = path.join(target, relativeName);
+      await fs.mkdir(path.dirname(destination), { recursive: true });
+      await fs.copyFile(absolutePath, destination);
+    }
+    return this.flowSummary(newFlowName);
+  }
+
+  private async flowSummary(flowName: string): Promise<FlowSummary> {
+    const flowDir = this.resolveFlowDirectory(flowName);
+    const stat = await fs.stat(flowDir);
+    return { name: flowName, designCount: await this.countDesigns(flowDir), updatedAt: stat.mtime.toISOString(), absolutePath: flowDir };
+  }
+
+  /**
+   * A whole flow as a ZIP archive whose entries sit under a `<flow>/` folder,
+   * so unpacking it recreates the flow directory with its relative links intact.
+   */
+  async exportFlowArchive(flowName: string): Promise<{ fileName: string; data: Uint8Array; fileCount: number }> {
+    const flowDir = this.resolveFlowDirectory(flowName);
+    if (!(await pathExists(flowDir))) throw new Error(`Flow "${flowName}" does not exist`);
+    const files = await this.walkDesignFiles(flowDir, flowDir);
+    const entries: ZipEntry[] = [];
+    for (const [absolutePath, relativeName] of files.sort((a, b) => a[1].localeCompare(b[1]))) {
+      const stat = await fs.stat(absolutePath);
+      entries.push({ name: `${flowName}/${relativeName}`, data: await fs.readFile(absolutePath), modifiedAt: stat.mtime });
+    }
+    return { fileName: `${flowName}.zip`, data: createZip(entries), fileCount: entries.length };
   }
 
   /**
@@ -366,6 +423,66 @@ export default class WebDesignService implements TokenRingService {
   /** Workspace-relative path of a design file, matching how the archive keys versions. */
   private workspaceRelativeDesignPath(flowName: string, designName: string): string {
     return `${this.getServeDirectory()}/${flowName}/${normalizeFileName(designName)}`;
+  }
+
+  /**
+   * Moves a design to a new name, optionally into another flow. Refuses to
+   * overwrite an existing file. Returns the design as stored under its new name.
+   */
+  async renameDesign(flowName: string, designName: string, newFlowName: string, newDesignName: string): Promise<Design> {
+    const source = this.resolveDesignPath(flowName, designName);
+    const target = this.resolveDesignPath(newFlowName, newDesignName);
+    if (source === target) throw new Error(`File "${designName}" already has that name`);
+    if (!(await pathExists(source))) throw new Error(`File "${designName}" does not exist in flow "${flowName}"`);
+    if (await pathExists(target)) throw new Error(`File "${newDesignName}" already exists in flow "${newFlowName}"`);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.rename(source, target);
+    const design = await this.getDesign(newFlowName, newDesignName);
+    if (!design) throw new Error(`File "${newDesignName}" could not be read after renaming`);
+    return design;
+  }
+
+  /** Copies a design to a new name, optionally into another flow. Refuses to overwrite an existing file. */
+  async duplicateDesign(flowName: string, designName: string, newFlowName: string, newDesignName: string): Promise<Design> {
+    const design = await this.getDesign(flowName, designName);
+    if (!design) throw new Error(`File "${designName}" does not exist in flow "${flowName}"`);
+    return this.createDesign(newFlowName, newDesignName, design.content, design.encoding);
+  }
+
+  /**
+   * Screenshots a saved design in a throwaway browser session (the same
+   * capture as the design_screenshot tool, without an agent) and, unless
+   * `save` is false, stores the PNG in the flow under `screenshots/`.
+   */
+  async captureScreenshot(
+    flowName: string,
+    designName: string,
+    options: { width?: number | undefined; height?: number | undefined; save?: boolean } = {},
+  ): Promise<DesignScreenshot & { savedAs: string | null }> {
+    const browserService = this.app.requireService(BrowserService);
+    const baseUrl = this.options.previewBaseUrl?.replace(/\/+$/, "") ?? this.app.requireService(WebHostService).getURL().origin;
+    const sessionName = `web-design-screenshot-${randomBytes(6).toString("hex")}`;
+    const session = browserService.createSession(sessionName, this.options.screenshotProfile);
+    let screenshot: DesignScreenshot;
+    try {
+      screenshot = await captureDesignScreenshot({
+        webDesignService: this,
+        session,
+        baseUrl,
+        flowName,
+        designName,
+        width: options.width,
+        height: options.height,
+      });
+    } finally {
+      browserService.closeSession(sessionName);
+    }
+    let savedAs: string | null = null;
+    if (options.save !== false) {
+      const saved = await this.createDesign(flowName, screenshotFileName(screenshot.designName, screenshot.viewport), screenshot.base64, "base64");
+      savedAs = saved.name;
+    }
+    return { ...screenshot, savedAs };
   }
 
   async deleteDesign(flowName: string, designName: string): Promise<boolean> {

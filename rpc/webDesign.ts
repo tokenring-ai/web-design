@@ -5,7 +5,7 @@ import { createRPCEndpoint } from "@tokenring-ai/rpc/createRPCEndpoint";
 import type { DesignSummary, FlowSummary } from "../schema.ts";
 import { WebDesignState } from "../state/WebDesignState.ts";
 import WebDesignService from "../WebDesignService.ts";
-import { getDesignRevision } from "./revision.ts";
+import { bumpDesignRevision, getDesignRevision } from "./revision.ts";
 import WebDesignRpcSchema from "./schema.ts";
 
 /**
@@ -72,13 +72,37 @@ export default createRPCEndpoint(WebDesignRpcSchema, {
   async createFlow(args, app: TokenRingApp) {
     const webDesignService = app.requireService(WebDesignService);
     const flow = await webDesignService.createFlow(args.name);
+    bumpDesignRevision();
     return { flow };
   },
 
   async deleteFlow(args, app: TokenRingApp) {
     const webDesignService = app.requireService(WebDesignService);
     const success = await webDesignService.deleteFlow(args.name);
+    bumpDesignRevision();
     return { success };
+  },
+
+  async renameFlow(args, app: TokenRingApp) {
+    const flow = await app.requireService(WebDesignService).renameFlow(args.name, args.newName);
+    bumpDesignRevision();
+    return { flow };
+  },
+
+  async duplicateFlow(args, app: TokenRingApp) {
+    const flow = await app.requireService(WebDesignService).duplicateFlow(args.name, args.newName);
+    bumpDesignRevision();
+    return { flow };
+  },
+
+  async exportFlow(args, app: TokenRingApp) {
+    const archive = await app.requireService(WebDesignService).exportFlowArchive(args.name);
+    return {
+      fileName: archive.fileName,
+      mimeType: "application/zip" as const,
+      content: Buffer.from(archive.data).toString("base64"),
+      fileCount: archive.fileCount,
+    };
   },
 
   async listDesigns(args, app: TokenRingApp) {
@@ -109,6 +133,34 @@ export default createRPCEndpoint(WebDesignRpcSchema, {
     const webDesignService = app.requireService(WebDesignService);
     const success = await webDesignService.deleteDesign(args.flowName, args.name);
     return { success };
+  },
+
+  async renameDesign(args, app: TokenRingApp) {
+    const design = await app.requireService(WebDesignService).renameDesign(args.flowName, args.name, args.newFlowName ?? args.flowName, args.newName);
+    bumpDesignRevision();
+    return { design };
+  },
+
+  async duplicateDesign(args, app: TokenRingApp) {
+    const design = await app.requireService(WebDesignService).duplicateDesign(args.flowName, args.name, args.newFlowName ?? args.flowName, args.newName);
+    bumpDesignRevision();
+    return { design };
+  },
+
+  async captureDesignScreenshot(args, app: TokenRingApp) {
+    const screenshot = await app.requireService(WebDesignService).captureScreenshot(args.flowName, args.name, {
+      width: args.width,
+      height: args.height,
+      save: args.save,
+    });
+    if (screenshot.savedAs) bumpDesignRevision();
+    return {
+      savedAs: screenshot.savedAs,
+      content: screenshot.base64,
+      mimeType: "image/png" as const,
+      viewport: screenshot.viewport,
+      console: screenshot.console,
+    };
   },
 
   async listDesignHistory(args, app: TokenRingApp) {
@@ -145,7 +197,9 @@ export default createRPCEndpoint(WebDesignRpcSchema, {
 
     const webDesignService = app.requireService(WebDesignService);
 
-    if (args.selectedFlowName && args.selectedDesignName) {
+    if (args.selectedFlowName === null || args.selectedDesignName === null) {
+      webDesignService.clearCurrentDesign(agent);
+    } else if (args.selectedFlowName && args.selectedDesignName) {
       await webDesignService.selectDesign(args.selectedFlowName, args.selectedDesignName, agent);
     }
 

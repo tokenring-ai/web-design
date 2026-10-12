@@ -1,5 +1,6 @@
 import { useLocalStorageState } from "@tokenring-ai/one-frontend/hooks/useLocalStorageState.ts";
 import { Maximize2, Monitor, RotateCw, Smartphone, Tablet } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export interface DevicePreset {
   id: string;
@@ -22,6 +23,9 @@ export interface DeviceSelection {
   landscape: boolean;
   customWidth: number | null;
 }
+
+export const MIN_CUSTOM_WIDTH = 200;
+export const MAX_CUSTOM_WIDTH = 4096;
 
 export const DEFAULT_DEVICE_SELECTION: DeviceSelection = { presetId: "full", landscape: false, customWidth: null };
 
@@ -61,6 +65,14 @@ export function useDeviceSelection(): [DeviceSelection, (next: DeviceSelection) 
 
 /** Device-frame presets above the preview pane. State lives in the parent via {@link useDeviceSelection}. */
 export default function DeviceToolbar({ value, onChange }: { value: DeviceSelection; onChange: (next: DeviceSelection) => void }) {
+  const committedText = value.presetId === "custom" && value.customWidth !== null ? String(value.customWidth) : "";
+  // The field keeps what the user typed, so an out-of-range width is visible (and flagged) instead of vanishing.
+  const [widthText, setWidthText] = useState(committedText);
+  useEffect(() => setWidthText(committedText), [committedText]);
+  const parsedWidth = Number.parseInt(widthText, 10);
+  const widthOutOfRange = widthText !== "" && !(Number.isFinite(parsedWidth) && parsedWidth >= MIN_CUSTOM_WIDTH && parsedWidth <= MAX_CUSTOM_WIDTH);
+  const rangeHint = `Custom width must be ${MIN_CUSTOM_WIDTH}–${MAX_CUSTOM_WIDTH}px`;
+
   return (
     <div className="flex items-center gap-1" role="toolbar" aria-label="Preview device width">
       {DEVICE_PRESETS.map(preset => {
@@ -70,7 +82,10 @@ export default function DeviceToolbar({ value, onChange }: { value: DeviceSelect
           <button
             key={preset.id}
             type="button"
-            onClick={() => onChange({ presetId: preset.id, landscape: false, customWidth: null })}
+            onClick={() => {
+              setWidthText("");
+              onChange({ presetId: preset.id, landscape: false, customWidth: null });
+            }}
             title={preset.label}
             aria-label={preset.label}
             aria-pressed={active}
@@ -98,21 +113,31 @@ export default function DeviceToolbar({ value, onChange }: { value: DeviceSelect
         <span className="sr-only">Custom preview width in pixels</span>
         <input
           type="number"
-          min={200}
-          max={4096}
-          value={value.presetId === "custom" ? (value.customWidth ?? "") : ""}
+          min={MIN_CUSTOM_WIDTH}
+          max={MAX_CUSTOM_WIDTH}
+          value={widthText}
           placeholder="Custom"
+          aria-invalid={widthOutOfRange}
+          title={widthOutOfRange ? rangeHint : `Custom width (${MIN_CUSTOM_WIDTH}–${MAX_CUSTOM_WIDTH}px)`}
           onChange={event => {
-            const parsed = Number.parseInt(event.target.value, 10);
-            if (Number.isFinite(parsed) && parsed >= 200 && parsed <= 4096) {
+            const text = event.target.value;
+            setWidthText(text);
+            const parsed = Number.parseInt(text, 10);
+            if (Number.isFinite(parsed) && parsed >= MIN_CUSTOM_WIDTH && parsed <= MAX_CUSTOM_WIDTH) {
               onChange({ presetId: "custom", landscape: false, customWidth: parsed });
-            } else if (event.target.value === "") {
+            } else if (text === "" && value.presetId === "custom") {
               onChange(DEFAULT_DEVICE_SELECTION);
             }
           }}
-          className="w-16 px-1.5 py-0.5 bg-transparent border border-primary rounded text-xs text-primary focus-ring"
+          className={`w-16 px-1.5 py-0.5 bg-transparent border rounded text-xs text-primary focus-ring ${widthOutOfRange ? "border-red-500" : "border-primary"}`}
         />
-        {effectivePreviewWidth(value) !== null && <span className="shrink-0 tabular-nums">{effectivePreviewWidth(value)}px</span>}
+        {widthOutOfRange ? (
+          <span role="alert" className="shrink-0 text-red-500">
+            {MIN_CUSTOM_WIDTH}–{MAX_CUSTOM_WIDTH}px
+          </span>
+        ) : (
+          effectivePreviewWidth(value) !== null && <span className="shrink-0 tabular-nums">{effectivePreviewWidth(value)}px</span>
+        )}
       </label>
     </div>
   );

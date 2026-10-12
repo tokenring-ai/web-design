@@ -51,6 +51,10 @@ export const WebDesignServiceConfigSchema = z
       .string()
       .optional()
       .meta({ description: "Base URL used by agents to open hosted design previews; defaults to the web host URL" } satisfies ConfigFieldMeta),
+    screenshotProfile: z
+      .string()
+      .default("default")
+      .meta({ advanced: true, description: "Browser profile used for screenshots captured from the Web Design app" } satisfies ConfigFieldMeta),
     agentTypes: z
       .array(z.string())
       .default(["web-design", "web-design-visual"])

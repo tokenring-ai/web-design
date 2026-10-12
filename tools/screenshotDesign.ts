@@ -4,74 +4,49 @@ import type { TokenRingToolDefinition, TokenRingToolResult } from "@tokenring-ai
 import { ToolCallError } from "@tokenring-ai/chat/util/tokenRingTool";
 import { WebHostService } from "@tokenring-ai/web-host";
 import { z } from "zod";
+import { CURRENT_DESIGN_CONTEXT } from "../contextHandlers/currentDesign.ts";
+import { captureDesignScreenshot, DesignNotFoundError, type DesignScreenshot } from "../screenshot/captureDesignScreenshot.ts";
 import WebDesignService from "../WebDesignService.ts";
 
 const name = "design_screenshot";
 const displayName = "Web Design/screenshot design";
 
-/** Captures what the page printed to the console since the navigation (errors first). */
-function consoleReport(record: { consoleMessages: { level: string; text: string; navigationGeneration: number }[]; navigationGeneration: number }): string {
-  const sinceNavigation = record.consoleMessages.filter(entry => entry.navigationGeneration >= record.navigationGeneration);
-  const problems = sinceNavigation.filter(entry => entry.level === "error" || entry.level === "warning");
-  const lines = (problems.length > 0 ? problems : sinceNavigation).slice(0, 20).map(entry => entry.text);
-  if (lines.length === 0) return "Console: clean (no messages since navigation).";
-  return `Console (${problems.length} problem${problems.length === 1 ? "" : "s"} since navigation):\n${lines.join("\n")}`;
-}
-
 async function execute({ flowName, name: designName, width, height }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
   const webDesignService = agent.requireService(WebDesignService);
   const browserService = agent.requireService(BrowserService);
 
-  const design = await webDesignService.getDesign(flowName, designName);
-  if (!design) {
+  if (!(await webDesignService.getDesign(flowName, designName))) {
     throw new ToolCallError(name, `Design "${flowName}/${designName}" does not exist`);
   }
-
-  const previewUrl = new URL(
-    `/api/web-design/preview/${encodeURIComponent(flowName)}/${encodeURIComponent(design.name)}`,
-    await resolveBaseUrl(agent, webDesignService),
-  );
-  previewUrl.searchParams.set("token", webDesignService.getPreviewToken());
-
+  const baseUrl = await resolveBaseUrl(agent, webDesignService);
   const session = browserService.ensureSession(agent);
-  const record = session.ensureView();
 
-  let base64: string;
+  let screenshot: DesignScreenshot;
   try {
-    await session.navigate(record, previewUrl.toString());
-    if (width !== undefined && height !== undefined) {
-      await session.run(record, () => record.view.resize(width, height), {
-        timeoutMs: session.profile.timeouts.action,
-        label: "Resize viewport",
-      });
-      record.viewport = { width, height };
-    }
-    base64 = await session.run(record, () => record.view.screenshot({ encoding: "base64", format: "png" }), {
-      timeoutMs: session.profile.timeouts.action,
-      label: "Screenshot",
-    });
+    screenshot = await captureDesignScreenshot({ webDesignService, session, baseUrl, flowName, designName, width, height });
   } catch (error: unknown) {
+    if (error instanceof DesignNotFoundError) throw new ToolCallError(name, error.message);
     throw new ToolCallError(name, "Failed to capture a design screenshot", { cause: error });
   } finally {
     browserService.syncState(agent, session);
   }
 
-  const { width: viewportWidth, height: viewportHeight } = record.viewport;
+  const { width: viewportWidth, height: viewportHeight } = screenshot.viewport;
 
   return {
     message: `**Web Design** Captured a ${viewportWidth}x${viewportHeight} screenshot of "${flowName}/${designName}"`,
     result: JSON.stringify({
       design: `${flowName}/${designName}`,
-      viewport: record.viewport,
-      console: consoleReport(record),
+      viewport: screenshot.viewport,
+      console: screenshot.console,
     }),
     attachments: [
       {
         sendToLLM: true,
-        name: `${design.name.replace(/\.[^.]+$/, "")}.png`,
+        name: `${screenshot.designName.replace(/\.[^.]+$/, "")}.png`,
         mimeType: "image/png",
         encoding: "base64",
-        body: base64,
+        body: screenshot.base64,
       },
     ],
   };
@@ -105,6 +80,7 @@ export default {
   name,
   displayName,
   description,
+  requiredContextHandlers: [CURRENT_DESIGN_CONTEXT],
   inputSchema,
   execute,
 } satisfies TokenRingToolDefinition<typeof inputSchema>;

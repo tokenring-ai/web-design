@@ -57,6 +57,39 @@ export default {
         success: z.boolean(),
       }),
     },
+    renameFlow: {
+      type: "mutation",
+      input: z.object({
+        name: z.string(),
+        newName: z.string(),
+      }),
+      result: z.object({
+        flow: FlowSummarySchema,
+      }),
+    },
+    duplicateFlow: {
+      type: "mutation",
+      input: z.object({
+        name: z.string(),
+        newName: z.string(),
+      }),
+      result: z.object({
+        flow: FlowSummarySchema,
+      }),
+    },
+    /** A whole flow as a ZIP archive (entries under `<flow>/`), base64-encoded. */
+    exportFlow: {
+      type: "query",
+      input: z.object({
+        name: z.string(),
+      }),
+      result: z.object({
+        fileName: z.string(),
+        mimeType: z.literal("application/zip"),
+        content: z.string(),
+        fileCount: z.number(),
+      }),
+    },
     listDesigns: {
       type: "query",
       input: z.object({
@@ -119,6 +152,56 @@ export default {
         success: z.boolean(),
       }),
     },
+    /** Moves a design to a new name (and optionally another flow); refuses to overwrite. */
+    renameDesign: {
+      type: "mutation",
+      input: z.object({
+        flowName: z.string(),
+        name: z.string(),
+        newFlowName: z.string().exactOptional(),
+        newName: z.string(),
+      }),
+      result: z.object({
+        design: DesignSchema,
+      }),
+    },
+    /** Copies a design to a new name (and optionally another flow); refuses to overwrite. */
+    duplicateDesign: {
+      type: "mutation",
+      input: z.object({
+        flowName: z.string(),
+        name: z.string(),
+        newFlowName: z.string().exactOptional(),
+        newName: z.string(),
+      }),
+      result: z.object({
+        design: DesignSchema,
+      }),
+    },
+    /**
+     * Screenshots a saved design in a headless browser (same capture as the
+     * design_screenshot tool). With `save` (default) the PNG is also stored in
+     * the flow under `screenshots/`.
+     */
+    captureDesignScreenshot: {
+      type: "mutation",
+      input: z.object({
+        flowName: z.string(),
+        name: z.string(),
+        width: z.number().int().min(1).max(16384).exactOptional(),
+        height: z.number().int().min(1).max(16384).exactOptional(),
+        save: z.boolean().default(true),
+      }),
+      result: z.object({
+        /** Flow-relative name of the saved PNG, or null when not saved. */
+        savedAs: z.string().nullable(),
+        /** PNG bytes, base64-encoded. */
+        content: z.string(),
+        mimeType: z.literal("image/png"),
+        viewport: z.object({ width: z.number(), height: z.number() }),
+        console: z.string(),
+      }),
+    },
     listDesignHistory: {
       type: "query",
       input: z.object({
@@ -165,8 +248,9 @@ export default {
       type: "mutation",
       input: z.object({
         agentId: z.string(),
-        selectedFlowName: z.string().exactOptional(),
-        selectedDesignName: z.string().exactOptional(),
+        /** Both names select that design as the agent's current design; null for either clears the selection. */
+        selectedFlowName: z.string().nullable().exactOptional(),
+        selectedDesignName: z.string().nullable().exactOptional(),
       }),
       result: z.discriminatedUnion("status", [
         SuccessSchema.extend({
