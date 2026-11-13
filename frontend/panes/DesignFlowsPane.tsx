@@ -1,19 +1,19 @@
+import { useAttachedAgentChat } from "@tokenring-ai/one-frontend/apps/chat/useAttachedAgentChat.ts";
 import AgentSessionList from "@tokenring-ai/one-frontend/components/AgentSessionList.tsx";
 import NavigationSidebarHeader from "@tokenring-ai/one-frontend/components/layout/NavigationSidebarHeader.tsx";
 import AsyncListBody from "@tokenring-ai/one-frontend/components/ui/AsyncListBody.tsx";
 import ConfirmModal from "@tokenring-ai/one-frontend/components/ui/ConfirmModal.tsx";
 import CreateItemModal from "@tokenring-ai/one-frontend/components/ui/CreateItemModal.tsx";
 import ListItemWithActions from "@tokenring-ai/one-frontend/components/ui/ListItemWithActions.tsx";
-import SaveAsModal from "@tokenring-ai/one-frontend/components/ui/SaveAsModal.tsx";
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
 import ViewShell from "@tokenring-ai/one-frontend/components/ui/ViewShell.tsx";
-import { usePanel } from "@tokenring-ai/one-frontend/dock/PanelContext.tsx";
-import { useAgentChatPanel } from "@tokenring-ai/one-frontend/dock/useAgentChatPanel.ts";
 import { useAppAgentSession } from "@tokenring-ai/one-frontend/hooks/useAppAgentSession.tsx";
 import { useAutoExpandTree } from "@tokenring-ai/one-frontend/hooks/useAutoExpandTree.ts";
 import { useFileUpload } from "@tokenring-ai/one-frontend/hooks/useFileUpload.ts";
+import { useLayoutApi } from "@tokenring-ai/one-frontend/layout/context.ts";
 import { runOrConfirm } from "@tokenring-ai/one-frontend/lib/uiPreferences.ts";
 import { agentRPCClient, useDesigns, useFlows, webDesignRPCClient } from "@tokenring-ai/one-frontend/rpc.ts";
+import { Button } from "@tokenring-ai/one-frontend/ui";
 import formatError from "@tokenring-ai/utility/error/formatError";
 import type { DesignSummary, FlowSummary } from "@tokenring-ai/web-design/schema";
 import {
@@ -33,10 +33,12 @@ import {
   Workflow,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import DesignSaveAsModal from "../components/DesignSaveAsModal.tsx";
+import { DESIGN_EDITOR_VIEW_ID, DESIGN_LANDING_VIEW_ID } from "../ids.ts";
+import { useWebDesignHosting } from "../lib/designData.ts";
 import { designBlob, downloadBlob } from "../lib/downloadDesign.ts";
-import { copyFileName, DEFAULT_HTML, designKey, designNameFromRouteParams, FILE_NAME_PATTERN, FLOW_NAME_PATTERN } from "../lib/paths.ts";
-import { useWebDesignHosting, useWebDesignNavigation } from "../lib/webDesignShared.tsx";
+import { copyFileName, DEFAULT_HTML, designKey, FILE_NAME_PATTERN, FLOW_NAME_PATTERN } from "../lib/paths.ts";
+import { useWebDesignLayoutNavigation } from "../lib/useWebDesignLayoutNavigation.ts";
 import {
   attachDesign,
   forgetDesignDocument,
@@ -45,7 +47,6 @@ import {
   setWebDesignAgentSession,
   useAttachedDesigns,
 } from "../lib/webDesignStore.ts";
-import { WEB_DESIGN_DASHBOARD_ID } from "../manifest.ts";
 
 interface Selection {
   flowName: string;
@@ -277,9 +278,9 @@ function FlowRow({
 }
 
 /**
- * The design agents this dashboard can attach to. Owns the only
- * `useAppAgentSession` of the app: it docks the chat panel (carrying the
- * designs attached from the tree and the editor) beside the flows and
+ * The design agents this app can attach to. Owns the only
+ * `useAppAgentSession` of the app: it opens the chat panel (carrying the
+ * designs attached from the tree and the editor) beside the designs and
  * publishes the session the other panels drive.
  */
 function DesignAgentSessions({ onAgentChange, selected }: { onAgentChange: (agentId: string | null) => void; selected: Selection | null }) {
@@ -290,7 +291,7 @@ function DesignAgentSessions({ onAgentChange, selected }: { onAgentChange: (agen
     agentTypes,
   });
   const extraAttachments = useAttachedDesigns();
-  useAgentChatPanel({ agentId, extraAttachments, onRemoveExtraAttachment: removeAttachedDesign });
+  useAttachedAgentChat({ agentId, extraAttachments, onRemoveExtraAttachment: removeAttachedDesign });
 
   useEffect(() => {
     onAgentChange(agentId);
@@ -354,16 +355,15 @@ function DesignAgentSessions({ onAgentChange, selected }: { onAgentChange: (agen
 }
 
 /**
- * Navigator for the Web Design dashboard: design flows, the files inside them
- * and the running design agents. Rows open a design's editor and preview in the
- * main area; elsewhere (another dashboard) they navigate to Web Design.
+ * Navigator for the Web Design app: design flows, the files inside them and the
+ * running design agents. Rows open a design's editor and preview.
  */
-export default function DesignFlowsView() {
-  const panel = usePanel();
-  const inWebDesignDashboard = panel.dashboardId === WEB_DESIGN_DASHBOARD_ID;
-  const routeParams = useParams();
-  const routeFlowName = routeParams.flowName;
-  const routeDesignName = designNameFromRouteParams(routeParams);
+export default function DesignFlowsPane() {
+  const { route } = useLayoutApi();
+  // The URL names the open design (editor) or, on the landing tab, just a flow to expand.
+  const routeParams = route?.viewId === DESIGN_EDITOR_VIEW_ID || route?.viewId === DESIGN_LANDING_VIEW_ID ? route.params : null;
+  const routeFlowName = routeParams?.flowName;
+  const routeDesignName = routeParams?.["*"];
   const selected: Selection | null = useMemo(
     () => (routeFlowName && routeDesignName ? { flowName: routeFlowName, name: routeDesignName } : null),
     [routeFlowName, routeDesignName],
@@ -371,7 +371,7 @@ export default function DesignFlowsView() {
 
   const { data, isLoading, error, mutate } = useFlows();
   const flows: FlowSummary[] = useMemo(() => data?.flows ?? [], [data]);
-  const { openDesign, closeDesign, closeFlow, renameDesign, renameFlow } = useWebDesignNavigation();
+  const { openDesign, closeDesign, closeFlow, renameDesign, renameFlow } = useWebDesignLayoutNavigation();
 
   const [agentId, setAgentId] = useState<string | null>(null);
   const [newDesignFlow, setNewDesignFlow] = useState<string | null>(null);
@@ -573,14 +573,9 @@ export default function DesignFlowsView() {
         <>
           A flow groups the screens of one journey. Ask a design agent to sketch one, or start it yourself.
           <span className="block mt-2">
-            <button
-              type="button"
-              onClick={() => setNewFlowOpen(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 border border-primary text-primary hover:bg-hover text-xs font-medium rounded-lg transition-colors focus-ring cursor-pointer"
-            >
-              <Plus className="w-3 h-3" />
+            <Button variant="secondary" icon={Plus} onClick={() => setNewFlowOpen(true)}>
               New flow
-            </button>
+            </Button>
           </span>
         </>
       }
@@ -637,31 +632,15 @@ export default function DesignFlowsView() {
         />
       }
     >
-      {inWebDesignDashboard && <DesignAgentSessions onAgentChange={setAgentId} selected={selected} />}
+      <DesignAgentSessions onAgentChange={setAgentId} selected={selected} />
 
       <div className="flex-1 min-h-0 overflow-y-auto">{body}</div>
 
       {newDesignFlow !== null && (
-        <SaveAsModal
+        <DesignSaveAsModal
           title="Save File"
-          containerField={{
-            label: "Flow",
-            placeholder: "onboarding",
-            initialValue: newDesignFlow || (selected?.flowName ?? ""),
-            pattern: FLOW_NAME_PATTERN,
-            validationError: "Use letters, numbers, hyphens, and underscores only, starting with a letter or number.",
-            options: flows.map(flow => ({ value: flow.name })),
-          }}
-          itemField={{
-            label: "File name",
-            placeholder: "index.html",
-            initialValue: "index.html",
-            pattern: FILE_NAME_PATTERN,
-            validationError: "Use letters, numbers, dots, hyphens, and underscores only; subfolders are allowed (assets/logo.png).",
-            options: [],
-            autoFocus: true,
-            selectOnFocus: true,
-          }}
+          flowNames={flows.map(flow => flow.name)}
+          initialFlow={newDesignFlow || (selected?.flowName ?? "")}
           onSave={handleCreateDesign}
           onClose={() => setNewDesignFlow(null)}
         />
@@ -690,28 +669,13 @@ export default function DesignFlowsView() {
         />
       )}
       {designDialog && (
-        <SaveAsModal
+        <DesignSaveAsModal
           title={designDialog.mode === "rename" ? `Rename ${designDialog.name}` : `Duplicate ${designDialog.name}`}
           saveLabel={designDialog.mode === "rename" ? "Rename" : "Duplicate"}
           saveIcon={designDialog.mode === "rename" ? Pencil : Copy}
-          containerField={{
-            label: "Flow",
-            placeholder: "onboarding",
-            initialValue: designDialog.flowName,
-            pattern: FLOW_NAME_PATTERN,
-            validationError: "Use letters, numbers, hyphens, and underscores only, starting with a letter or number.",
-            options: flows.map(flow => ({ value: flow.name })),
-          }}
-          itemField={{
-            label: "File name",
-            placeholder: "index.html",
-            initialValue: designDialog.mode === "rename" ? designDialog.name : copyFileName(designDialog.name),
-            pattern: FILE_NAME_PATTERN,
-            validationError: "Use letters, numbers, dots, hyphens, and underscores only; subfolders are allowed (assets/logo.png).",
-            options: [],
-            autoFocus: true,
-            selectOnFocus: true,
-          }}
+          flowNames={flows.map(flow => flow.name)}
+          initialFlow={designDialog.flowName}
+          initialName={designDialog.mode === "rename" ? designDialog.name : copyFileName(designDialog.name)}
           onSave={handleDesignDialog}
           onClose={() => setDesignDialog(null)}
         />

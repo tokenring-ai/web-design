@@ -1,31 +1,31 @@
 import Editor from "@monaco-editor/react";
+import { usePanelBadge } from "@tokenring-ai/one-frontend/apps/panelHooks.ts";
 import EditorSaveBar from "@tokenring-ai/one-frontend/components/ui/EditorSaveBar.tsx";
 import EmptyState from "@tokenring-ai/one-frontend/components/ui/EmptyState.tsx";
-import EmptyStateWithPrompt from "@tokenring-ai/one-frontend/components/ui/EmptyStateWithPrompt.tsx";
 import LoadingState from "@tokenring-ai/one-frontend/components/ui/LoadingState.tsx";
-import SaveAsModal from "@tokenring-ai/one-frontend/components/ui/SaveAsModal.tsx";
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
 import ViewHeader from "@tokenring-ai/one-frontend/components/ui/ViewHeader.tsx";
 import ViewShell from "@tokenring-ai/one-frontend/components/ui/ViewShell.tsx";
-import { useDashboardApi } from "@tokenring-ai/one-frontend/dock/DashboardApiContext.tsx";
-import { setPanelBadge } from "@tokenring-ai/one-frontend/dock/panelBadges.ts";
-import type { ViewPanelHandle, ViewProps } from "@tokenring-ai/one-frontend/dock/types.ts";
 import { useFileUpload } from "@tokenring-ai/one-frontend/hooks/useFileUpload.ts";
 import { useKeyboardShortcuts } from "@tokenring-ai/one-frontend/hooks/useKeyboardShortcuts.ts";
-import { useNavigationStatePayload } from "@tokenring-ai/one-frontend/hooks/useNavigationStatePayload.ts";
 import { useRemoteChangeDetection } from "@tokenring-ai/one-frontend/hooks/useRemoteChangeDetection.ts";
 import { useTheme } from "@tokenring-ai/one-frontend/hooks/useTheme.ts";
+import type { ViewProps } from "@tokenring-ai/one-frontend/layout/define.ts";
+import { useLayout, usePanel } from "@tokenring-ai/one-frontend/layout/hooks.ts";
 import { useFlows, webDesignRPCClient } from "@tokenring-ai/one-frontend/rpc.ts";
 import { useMonacoTheme } from "@tokenring-ai/one-frontend/theme/bridges/useMonacoTheme.ts";
+import { Button } from "@tokenring-ai/one-frontend/ui";
 import formatError from "@tokenring-ai/utility/error/formatError";
-import { Download, FileCode2, FileUp, Frame, History, Paperclip, RotateCcw } from "lucide-react";
+import { Download, FileCode2, FileUp, History, Paperclip, RotateCcw } from "lucide-react";
 import { type ComponentProps, useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import type { DesignEditorParams } from "../app.tsx";
+import DesignSaveAsModal from "../components/DesignSaveAsModal.tsx";
 import HistoryPanel from "../components/HistoryPanel.tsx";
+import { DESIGN_EDITOR_VIEW_ID, DESIGN_PREVIEW_VIEW_ID } from "../ids.ts";
+import { useDesignLoad } from "../lib/designData.ts";
+import { editorParams, previewParams } from "../lib/designParams.ts";
 import { downloadDesign } from "../lib/downloadDesign.ts";
-import { copyFileName, designBasename, designKey, editorLanguage, FILE_NAME_PATTERN, FLOW_NAME_PATTERN, WEB_DESIGN_ROOT } from "../lib/paths.ts";
-import { useDesignLoad, useWebDesignNavigation } from "../lib/webDesignShared.tsx";
+import { copyFileName, designKey, editorLanguage } from "../lib/paths.ts";
+import { useWebDesignLayoutNavigation } from "../lib/useWebDesignLayoutNavigation.ts";
 import {
   attachDesign,
   bumpPreviewRevision,
@@ -34,127 +34,15 @@ import {
   setDesignDraft,
   useDesignDraft,
   useRevealRequest,
-  useWebDesignAgentSession,
 } from "../lib/webDesignStore.ts";
 
 type MonacoEditorInstance = Parameters<NonNullable<ComponentProps<typeof Editor>["onMount"]>>[0];
 
-/**
- * The panel before a design is opened: browse existing flows or describe the
- * screens you need and a design agent writes mockups into a flow. The agent
- * belongs to the flows navigator, which publishes the session this prompt uses.
- */
-function DesignLanding({ panel }: { panel: ViewPanelHandle<DesignEditorParams> }) {
-  const flows = useFlows();
-  const navigate = useNavigate();
-  const { openDesign } = useWebDesignNavigation();
-  const session = useWebDesignAgentSession();
-  const flowCount = flows.data?.flows.length ?? 0;
-  // HTML handed over from another app (Files → "Open in Web Design") lands here.
-  const [imported, setImported] = useState<string | null>(null);
-
-  useEffect(() => {
-    panel.setTitle("Select a design");
-  }, [panel]);
-
-  // One-shot payload: clear the navigation state so a later visit does not re-import it.
-  useNavigationStatePayload<{ fileContent?: string }>({
-    onPayload: state => {
-      if (state.fileContent === undefined) return;
-      setImported(state.fileContent);
-    },
-    clearAfterConsume: true,
-    navigate,
-    clearNavigateTo: WEB_DESIGN_ROOT,
-  });
-
-  const handleSaveImported = useCallback(
-    async (flowName: string, name: string) => {
-      try {
-        const { design } = await webDesignRPCClient.createDesign({ flowName, name, content: imported ?? "" });
-        setImported(null);
-        void flows.mutate();
-        openDesign(design.flowName, design.name);
-        toastManager.success("Saved", { duration: 2000 });
-      } catch (e: unknown) {
-        toastManager.error(formatError(e), { duration: 4000 });
-      }
-    },
-    [flows, imported, openDesign],
-  );
-
-  const handleStartDesign = useCallback(
-    async (prompt: string): Promise<boolean> => {
-      if (!session) {
-        toastManager.error("Open the Design flows panel to start a design agent", { duration: 5000 });
-        return false;
-      }
-      return session.start(prompt);
-    },
-    [session],
-  );
-
-  return (
-    <>
-      {imported !== null && (
-        <SaveAsModal
-          title="Save File"
-          containerField={{
-            label: "Flow",
-            placeholder: "onboarding",
-            initialValue: "",
-            pattern: FLOW_NAME_PATTERN,
-            validationError: "Use letters, numbers, hyphens, and underscores only, starting with a letter or number.",
-            options: (flows.data?.flows ?? []).map(flow => ({ value: flow.name })),
-          }}
-          itemField={{
-            label: "File name",
-            placeholder: "index.html",
-            initialValue: "index.html",
-            pattern: FILE_NAME_PATTERN,
-            validationError: "Use letters, numbers, dots, hyphens, and underscores only; subfolders are allowed (assets/logo.png).",
-            options: [],
-            autoFocus: true,
-            selectOnFocus: true,
-          }}
-          onSave={handleSaveImported}
-          onClose={() => setImported(null)}
-        />
-      )}
-      <EmptyStateWithPrompt
-        icon={Frame}
-        iconGradient="from-purple-500 to-violet-600"
-        title="Design with agents"
-        descriptionWithContent={
-          <>
-            Open a mockup from the <span className="font-medium text-secondary">Design Flows</span> panel to edit its HTML beside a live preview, or describe
-            screens below and a design agent will write mockups into flows for you.
-          </>
-        }
-        descriptionEmpty={
-          <>
-            Describe the product area and screens you need. A design agent will create a flow and save self-contained HTML mockups you can preview and refine
-            here.
-          </>
-        }
-        hasContent={flowCount > 0}
-        agentRunningMessage="A design agent is running in the chat panel. Designs it writes appear in the Design Flows panel — select one to open its editor and live preview."
-        hasAgent={!!session?.agentId}
-        promptLabel="Design prompt"
-        promptPlaceholder="e.g. Onboarding for a notes app: welcome, sign-up, empty state, first note"
-        submitLabel="Start design"
-        submitAriaLabel="Start design agent"
-        buttonVariant="violet"
-        onSubmit={handleStartDesign}
-      />
-    </>
-  );
-}
-
 /** One design file: the code editor with save, save-as, version history and annotations. */
-function DesignEditor({ flowName, designName, panel }: { flowName: string; designName: string; panel: ViewPanelHandle<DesignEditorParams> }) {
-  const dashboard = useDashboardApi();
-  const { openDesign } = useWebDesignNavigation();
+function DesignEditor({ flowName, designName }: { flowName: string; designName: string }) {
+  const panel = usePanel();
+  const layout = useLayout();
+  const { openDesign } = useWebDesignLayoutNavigation();
   const [theme] = useTheme();
   const monacoTheme = useMonacoTheme();
   const flows = useFlows();
@@ -173,15 +61,14 @@ function DesignEditor({ flowName, designName, panel }: { flowName: string; desig
   const isDirty = isReady && draft !== null && draft !== document.content;
   const isTextFile = document?.encoding !== "base64";
 
+  // A design opened by URL, row click or rename gets its live preview docked beside the editors (one shared column, the new preview in front).
+  // A preview that is already open is left where the user put it.
   useEffect(() => {
-    panel.setTitle(designBasename(designName));
-  }, [designName, panel]);
+    if (!layout.has(DESIGN_PREVIEW_VIEW_ID, previewParams(flowName, designName))) layout.open(DESIGN_PREVIEW_VIEW_ID, previewParams(flowName, designName));
+  }, [flowName, designName]);
 
   // Unsaved edits show as a dot on the tab; the draft itself survives closing the panel.
-  useEffect(() => {
-    setPanelBadge(panel.panelId, isDirty ? { tone: "warning", title: "Unsaved changes" } : null);
-  }, [isDirty, panel.panelId]);
-  useEffect(() => () => setPanelBadge(panel.panelId, null), [panel.panelId]);
+  usePanelBadge(isDirty ? { tone: "warning", label: "Unsaved changes" } : null);
 
   // An agent (or another client) rewriting the open design pulls in silently,
   // unless the user has local edits that would be clobbered.
@@ -253,7 +140,7 @@ function DesignEditor({ flowName, designName, panel }: { flowName: string; desig
   // Ctrl/⌘+S saves the design on screen.
   useKeyboardShortcuts([{ key: "s", allowInEditable: true, enabled: panel.isActive && isDirty, handler: () => void handleSave() }]);
 
-  /** Save As writes a copy and this panel follows it, so the tab never points at stale params. */
+  /** Save As writes a copy, which opens in its own tab (a panel's params never change). */
   const handleSaveAs = useCallback(
     async (nextFlow: string, nextName: string) => {
       try {
@@ -268,15 +155,16 @@ function DesignEditor({ flowName, designName, panel }: { flowName: string; desig
         });
         setDesignDraft(key, null);
         setSaveAsOpen(false);
-        dashboard.updateViewParams(panel.panelId, { flowName: design.flowName, designName: design.name });
         void flows.mutate();
+        // A panel's params are fixed: the copy opens in its own tab and this one closes.
         openDesign(design.flowName, design.name);
+        layout.close(DESIGN_EDITOR_VIEW_ID, editorParams(flowName, designName));
         toastManager.success("Saved", { duration: 2000 });
       } catch (e: unknown) {
         toastManager.error(formatError(e), { duration: 4000 });
       }
     },
-    [content, dashboard, document, flows, key, openDesign, panel.panelId],
+    [content, designName, document, flowName, flows, key, layout, openDesign],
   );
 
   // Binary assets cannot be edited here; they are replaced by uploading a file over them.
@@ -365,13 +253,9 @@ function DesignEditor({ flowName, designName, panel }: { flowName: string; desig
         ctaIcon={RotateCcw}
         onCta={() => void reload()}
         action={
-          <button
-            type="button"
-            onClick={() => panel.close()}
-            className="px-3 py-1.5 border border-primary text-muted hover:text-primary hover:bg-hover text-xs font-medium rounded-lg transition-colors focus-ring cursor-pointer"
-          >
+          <Button variant="secondary" onClick={() => panel.close()}>
             Close panel
-          </button>
+          </Button>
         }
       />
     );
@@ -469,26 +353,11 @@ function DesignEditor({ flowName, designName, panel }: { flowName: string; desig
       </div>
 
       {saveAsOpen && (
-        <SaveAsModal
+        <DesignSaveAsModal
           title="Save As"
-          containerField={{
-            label: "Flow",
-            placeholder: "onboarding",
-            initialValue: flowName,
-            pattern: FLOW_NAME_PATTERN,
-            validationError: "Use letters, numbers, hyphens, and underscores only, starting with a letter or number.",
-            options: (flows.data?.flows ?? []).map(flow => ({ value: flow.name })),
-          }}
-          itemField={{
-            label: "File name",
-            placeholder: "index.html",
-            initialValue: copyFileName(designName),
-            pattern: FILE_NAME_PATTERN,
-            validationError: "Use letters, numbers, dots, hyphens, and underscores only; subfolders are allowed (assets/logo.png).",
-            options: [],
-            autoFocus: true,
-            selectOnFocus: true,
-          }}
+          flowNames={(flows.data?.flows ?? []).map(flow => flow.name)}
+          initialFlow={flowName}
+          initialName={copyFileName(designName)}
           onSave={handleSaveAs}
           onClose={() => setSaveAsOpen(false)}
         />
@@ -497,13 +366,9 @@ function DesignEditor({ flowName, designName, panel }: { flowName: string; desig
   );
 }
 
-/**
- * One design file per panel. Without params the panel is the landing prompt,
- * which the next design opened from the navigator fills in place.
- */
-export default function DesignEditorView({ params, panel }: ViewProps<DesignEditorParams>) {
-  const { flowName, designName } = params;
-  if (!flowName || !designName) return <DesignLanding panel={panel} />;
-  // Keyed so a panel that follows a Save As reloads from scratch.
-  return <DesignEditor key={designKey(flowName, designName)} flowName={flowName} designName={designName} panel={panel} />;
+/** One design file per panel; the route's splat param is the file name. */
+export default function DesignEditorPane({ params }: ViewProps) {
+  const flowName = params.flowName ?? "";
+  const designName = params["*"] ?? "";
+  return <DesignEditor flowName={flowName} designName={designName} />;
 }

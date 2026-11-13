@@ -3,15 +3,16 @@ import LoadingState from "@tokenring-ai/one-frontend/components/ui/LoadingState.
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
 import ViewHeader from "@tokenring-ai/one-frontend/components/ui/ViewHeader.tsx";
 import ViewShell from "@tokenring-ai/one-frontend/components/ui/ViewShell.tsx";
-import type { ViewPanelHandle, ViewProps } from "@tokenring-ai/one-frontend/dock/types.ts";
 import { useDebounce } from "@tokenring-ai/one-frontend/hooks/useDebounce.ts";
 import { useLocalStorageState } from "@tokenring-ai/one-frontend/hooks/useLocalStorageState.ts";
 import { useRefSync } from "@tokenring-ai/one-frontend/hooks/useRefSync.ts";
+import type { ViewProps } from "@tokenring-ai/one-frontend/layout/define.ts";
+import { usePanel } from "@tokenring-ai/one-frontend/layout/hooks.ts";
 import { useDesigns, webDesignRPCClient } from "@tokenring-ai/one-frontend/rpc.ts";
+import { Button, Checkbox, TextArea } from "@tokenring-ai/one-frontend/ui";
 import formatError from "@tokenring-ai/utility/error/formatError";
 import { Camera, ExternalLink, ImageDown, Loader2, Monitor, PenLine, Play, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DesignPreviewParams } from "../app.tsx";
 import { AnnotationList, AnnotationPins } from "../components/AnnotationOverlay.tsx";
 import DeviceToolbar, { effectivePreviewWidth, useDeviceSelection } from "../components/DeviceToolbar.tsx";
 import { BRIDGE_ANNOTATE, BRIDGE_PICK, BRIDGE_RECTS, BRIDGE_TRACK, type BridgeRect, buildAnnotationBridgeScript } from "../lib/annotationBridge.ts";
@@ -26,9 +27,9 @@ import {
   parseAnnotations,
   setAnnotationResolved,
 } from "../lib/designAnnotations.ts";
+import { useDesignLoad, useWebDesignHosting } from "../lib/designData.ts";
 import { designBlob, downloadBlob } from "../lib/downloadDesign.ts";
 import { designBasename, designKey, previewFlowPath, previewPath } from "../lib/paths.ts";
-import { useDesignLoad, useWebDesignHosting } from "../lib/webDesignShared.tsx";
 import { requestRevealLine, setDesignDraft, useDesignDraft, usePreviewRevision, useWebDesignAgentSession } from "../lib/webDesignStore.ts";
 
 const DESIGN_IFRAME_SANDBOX = "allow-scripts allow-forms allow-popups allow-modals";
@@ -42,7 +43,8 @@ const DESIGN_IFRAME_SANDBOX = "allow-scripts allow-forms allow-popups allow-moda
 const HOSTED_ASSET_SANDBOX = "";
 
 /** Live preview of one design: the editor's content mirrored into a sandboxed iframe. */
-function DesignPreview({ flowName, designName, panel }: { flowName: string; designName: string; panel: ViewPanelHandle<DesignPreviewParams> }) {
+function DesignPreview({ flowName, designName }: { flowName: string; designName: string }) {
+  const panel = usePanel();
   const key = designKey(flowName, designName);
   const { document, error, reload } = useDesignLoad(flowName, designName);
   const draft = useDesignDraft(key);
@@ -72,10 +74,6 @@ function DesignPreview({ flowName, designName, panel }: { flowName: string; desi
   const [capturing, setCapturing] = useState(false);
   const [lastScreenshot, setLastScreenshot] = useState<{ fileName: string; content: string } | null>(null);
   const frameLoadedRef = useRef(false);
-
-  useEffect(() => {
-    panel.setTitle(`${designBasename(designName)} preview`);
-  }, [designName, panel]);
 
   // Debounced auto-preview: a ref so turning it off mid-debounce is honoured and a
   // stale debounced value is not re-applied when it is turned back on.
@@ -207,13 +205,9 @@ function DesignPreview({ flowName, designName, panel }: { flowName: string; desi
           ctaIcon={RotateCcw}
           onCta={() => void reload()}
           action={
-            <button
-              type="button"
-              onClick={() => panel.close()}
-              className="px-3 py-1.5 border border-primary text-muted hover:text-primary hover:bg-hover text-xs font-medium rounded-lg transition-colors focus-ring cursor-pointer"
-            >
+            <Button variant="secondary" onClick={() => panel.close()}>
               Close panel
-            </button>
+            </Button>
           }
         />
       );
@@ -265,31 +259,21 @@ function DesignPreview({ flowName, designName, panel }: { flowName: string; desi
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/70 shrink-0" />
               {isTextFile && <DeviceToolbar value={device} onChange={setDevice} />}
               {isTextFile && (
-                <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
-                  <input
-                    type="checkbox"
-                    checked={autoPreview}
-                    onChange={event => {
-                      const enabled = event.target.checked;
-                      setAutoPreview(enabled);
-                      // Catch up the preview when re-enabling after manual edits.
-                      if (enabled) setPreviewSource(content);
-                    }}
-                    className="w-3.5 h-3.5 accent-control cursor-pointer"
-                  />
-                  <span className="text-xs text-muted select-none">Auto-preview</span>
-                </label>
+                <Checkbox
+                  checked={autoPreview}
+                  className="shrink-0"
+                  label={<span className="text-muted select-none">Auto-preview</span>}
+                  onChange={enabled => {
+                    setAutoPreview(enabled);
+                    // Catch up the preview when re-enabling after manual edits.
+                    if (enabled) setPreviewSource(content);
+                  }}
+                />
               )}
               {isTextFile && !autoPreview && (
-                <button
-                  type="button"
-                  onClick={() => setPreviewSource(content)}
-                  title="Run preview"
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-500 dark:text-emerald-400 text-xs font-medium rounded-lg transition-colors cursor-pointer focus-ring shrink-0"
-                >
-                  <Play className="w-3 h-3" />
+                <Button variant="secondary" icon={Play} title="Run preview" onClick={() => setPreviewSource(content)} className="shrink-0">
                   Run
-                </button>
+                </Button>
               )}
               {isHtmlFile && (
                 <button
@@ -405,10 +389,10 @@ function DesignPreview({ flowName, designName, panel }: { flowName: string; desi
                     {pendingPick.target.id ? `#${pendingPick.target.id}` : ""}
                     {pendingPick.target.classes.length > 0 ? `.${pendingPick.target.classes.join(".")}` : ""}
                   </div>
-                  <textarea
+                  <TextArea
                     autoFocus
                     value={annotationDraft}
-                    onChange={event => setAnnotationDraft(event.target.value)}
+                    onChange={setAnnotationDraft}
                     onKeyDown={event => {
                       if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
@@ -419,24 +403,14 @@ function DesignPreview({ flowName, designName, panel }: { flowName: string; desi
                     placeholder="Leave a comment on this element…"
                     aria-label="Annotation comment"
                     rows={3}
-                    className="w-full px-2 py-1.5 bg-transparent border border-primary rounded text-xs text-primary focus-ring resize-none"
                   />
                   <div className="flex items-center gap-1.5 mt-2">
-                    <button
-                      type="button"
-                      onClick={submitPendingAnnotation}
-                      disabled={!annotationDraft.trim()}
-                      className="px-2 py-0.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition-colors cursor-pointer focus-ring disabled:opacity-50"
-                    >
+                    <Button onClick={submitPendingAnnotation} disabled={!annotationDraft.trim()}>
                       Add annotation
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingPick(null)}
-                      className="px-2 py-0.5 text-xs border border-primary text-muted hover:text-primary hover:bg-hover rounded-lg transition-colors cursor-pointer focus-ring"
-                    >
+                    </Button>
+                    <Button variant="secondary" onClick={() => setPendingPick(null)}>
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -460,7 +434,7 @@ function DesignPreview({ flowName, designName, panel }: { flowName: string; desi
   );
 }
 
-/** One design's live preview per panel, docked beside its editor. */
-export default function DesignPreviewView({ params, panel }: ViewProps<DesignPreviewParams>) {
-  return <DesignPreview key={designKey(params.flowName, params.designName)} flowName={params.flowName} designName={params.designName} panel={panel} />;
+/** One design's live preview per panel, docked in the previews column beside the editors. */
+export default function DesignPreviewPane({ params }: ViewProps) {
+  return <DesignPreview flowName={params.flowName ?? ""} designName={params.designName ?? ""} />;
 }
