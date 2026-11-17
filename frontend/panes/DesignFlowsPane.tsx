@@ -11,6 +11,7 @@ import { useAppAgentSession } from "@tokenring-ai/one-frontend/hooks/useAppAgent
 import { useAutoExpandTree } from "@tokenring-ai/one-frontend/hooks/useAutoExpandTree.ts";
 import { useFileUpload } from "@tokenring-ai/one-frontend/hooks/useFileUpload.ts";
 import { useLayoutApi } from "@tokenring-ai/one-frontend/layout/context.ts";
+import { requireAgentFound } from "@tokenring-ai/one-frontend/lib/requireAgentFound.ts";
 import { runOrConfirm } from "@tokenring-ai/one-frontend/lib/uiPreferences.ts";
 import { agentRPCClient, useDesigns, useFlows, webDesignRPCClient } from "@tokenring-ai/one-frontend/rpc.ts";
 import { Button } from "@tokenring-ai/one-frontend/ui";
@@ -312,7 +313,7 @@ function DesignAgentSessions({ onAgentChange, selected }: { onAgentChange: (agen
       const id = agentId ?? (await createAgent());
       if (!id) return false;
       try {
-        await agentRPCClient.sendInput({ agentId: id, input: { from: "Web Design app", message } });
+        requireAgentFound(await agentRPCClient.sendInput({ agentId: id, input: { from: "Web Design app", message } }));
         return true;
       } catch (error) {
         toastManager.error(formatError(error), { duration: 5000 });

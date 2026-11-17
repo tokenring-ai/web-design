@@ -49,7 +49,7 @@ let flowsState = [...flows];
 let designsByFlow: Record<string, typeof onboardingDesigns> = {};
 let getDesignResult: typeof indexDesign | null = indexDesign;
 
-const createAgent = mock(async (_args: { agentType: string; headless: boolean }) => ({ id: "web-design-agent-1", displayName: "Designer", description: "" }));
+const createAgent = mock(async (_args: { agentType: string }) => ({ id: "web-design-agent-1", displayName: "Designer", description: "" }));
 const sendInput = mock(async () => ({ status: "success" as const, requestId: "req-1" }));
 const deleteAgent = mock(async () => ({ status: "success" as const }));
 const getDesign = mock(async (args: { flowName: string; name: string }) => ({
@@ -98,7 +98,7 @@ void mock.module("@tokenring-ai/one-frontend/rpc.ts", () => ({
     mutate: mock(async () => undefined),
   }),
   useWebDesignConfiguration: () => ({
-    data: { agentTypes: ["web-design"], webDesignDirectory: "web-design", serveDirectory: ".tokenring/web-design", fsProvider: "posix", previewBaseUrl: null },
+    data: { agentTypes: ["web-design"], webDesignDirectory: "web-design", serveDirectory: ".tokenring/web-design", previewBaseUrl: null },
     isLoading: false,
     error: undefined,
     mutate: mock(async () => undefined),
@@ -608,7 +608,7 @@ describe("Web Design app", () => {
       await user.type(await screen.findByLabelText("Design prompt"), "Onboarding for a notes app");
       await user.click(screen.getByRole("button", { name: "Start design agent" }));
 
-      await waitFor(() => expect(createAgent).toHaveBeenCalledWith({ agentType: "web-design", headless: false }));
+      await waitFor(() => expect(createAgent).toHaveBeenCalledWith({ agentType: "web-design" }));
       expect(sendInput).toHaveBeenCalledWith({
         agentId: "web-design-agent-1",
         input: { from: "Web Design app", message: "/design Onboarding for a notes app" },
@@ -780,10 +780,10 @@ describe("Web Design app", () => {
       expect(preview).toHaveAttribute("sandbox", "allow-scripts allow-forms allow-popups allow-modals");
       const srcdoc = preview.getAttribute("srcdoc") ?? "";
       expect(srcdoc).toContain("<h1>Index</h1>");
-      expect(srcdoc).toContain('<base href="/api/fs/posix/.tokenring/web-design/onboarding/">');
+      expect(srcdoc).toContain('<base href="/api/fs/.tokenring/web-design/onboarding/">');
 
       const external = screen.getByTitle("Open hosted preview in a new tab");
-      expect(external.getAttribute("href")).toContain("/api/fs/posix/.tokenring/web-design/onboarding/index.html");
+      expect(external.getAttribute("href")).toContain("/api/fs/.tokenring/web-design/onboarding/index.html");
     });
 
     it("sandboxes the hosted preview of a binary asset", async () => {

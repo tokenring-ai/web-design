@@ -9,7 +9,7 @@ The `@tokenring-ai/web-design` package provides a simple two-level file store fo
 - A **Flow** is a named collection of related pages and assets (e.g. an onboarding flow or checkout flow).
 - A flow may contain HTML, CSS, JavaScript, images, fonts, and other browser assets.
 
-Files in a flow are hosted via the workspace filesystem HTTP endpoint at `/api/fs/posix/<webDesignDirectory>/<flow>/<file>`, so pages can link sibling files with ordinary relative URLs. Text files can be viewed and edited directly in the Web Design app; arbitrary files can be uploaded as flow assets. Previews load in a sandboxed iframe in the Web Design app.
+Files in a flow are hosted via the workspace filesystem HTTP endpoint at `/api/fs/<webDesignDirectory>/<flow>/<file>`, so pages can link sibling files with ordinary relative URLs. Text files can be viewed and edited directly in the Web Design app; arbitrary files can be uploaded as flow assets. Previews load in a sandboxed iframe in the Web Design app.
 
 ## Key Features
 
@@ -47,7 +47,7 @@ The `/design` command starts a web design run that writes HTML mockups into desi
 
 - Create or reuse a flow under the web design directory
 - Plan screens and states with todos
-- Write linked HTML/CSS/JS files via `design_write`
+- Write linked HTML/CSS/JS files via `file_write` (and `file_edit` for changes)
 - Iterate until the flow is complete
 
 The `/design-visual` command routes to the `web-design-visual` agent type, which additionally captures every
@@ -65,11 +65,9 @@ The package registers eight tools with the `ChatService`:
 |-----------------|------------------------------|--------------------------------------------------|
 | `flow_list`     | `Web Design/list flows`      | List the design flows (collections of related designs) in the web design directory |
 | `flow_create`   | `Web Design/create flow`     | Create a new, empty design flow (a named collection of related designs) |
-| `flow_delete`   | `Web Design/delete flow`     | Delete a design flow and all of the designs it contains |
-| `design_list`   | `Web Design/list designs`    | List the HTML, CSS, JavaScript, and asset files within a design flow |
-| `design_read`   | `Web Design/read design`     | Read a text file or base64-encoded binary asset within a design flow |
-| `design_write`  | `Web Design/write design`    | Create or overwrite a text file within a design flow. Files in the same flow are hosted together, so HTML can link to sibling CSS and JavaScript files with relative URLs. The flow is created automatically if it doesn't already exist. |
-| `design_delete` | `Web Design/delete design`   | Delete a file from a design flow |
+| `file_write`    | `Filesystem/write`           | Create or overwrite a file. Used to write each HTML, CSS and JavaScript file of a design into its flow directory. |
+| `file_edit`     | `Filesystem/edit`            | Make targeted edits to an existing design file. |
+| `file_read`     | `Filesystem/read`            | Read a design file before iterating on it. |
 | `design_screenshot` | `Web Design/screenshot design` | Capture a screenshot of a saved design in a headless browser and return it as an image with console errors |
 
 ### Tool Input Parameters
@@ -84,44 +82,12 @@ No input parameters.
 |-----------|----------|-------------------------|
 | `name`    | `string` | Name of the flow to create |
 
-#### `flow_delete`
+#### Design files
 
-| Parameter | Type     | Description             |
-|-----------|----------|-------------------------|
-| `name`    | `string` | Name of the flow to delete |
-
-#### `design_list`
-
-| Parameter  | Type     | Description                              |
-|------------|----------|------------------------------------------|
-| `flowName` | `string` | Name of the flow to list designs from    |
-
-#### `design_read`
-
-| Parameter  | Type     | Description                                                                    |
-|------------|----------|--------------------------------------------------------------------------------|
-| `flowName` | `string` | Name of the flow the design belongs to                                         |
-| `name`     | `string` | File name to read, including its extension (for example index.html or styles.css) |
-
-#### `design_write`
-
-| Parameter  | Type     | Description                                                                                            |
-|------------|----------|--------------------------------------------------------------------------------------------------------|
-| `flowName` | `string` | Name of the flow this design belongs to; created automatically if it doesn't exist                     |
-| `name`     | `string` | File name to create or update, including its extension (for example index.html, styles.css, or app.js) |
-| `content`  | `string` | Full text content, or base64 data when encoding is base64                                              |
-| `encoding` | `string` | How content is encoded (`"utf8"` or `"base64"`, default `"utf8"`)                                      |
-
-The tool writes through `updateDesign` (create or overwrite). Its result returns the saved file metadata
-(`flowName`, `name`, `size`, `updatedAt`) but not the `content` field. Each overwrite snapshots the previous
-content into the flow's history (tagged with source `agent`).
-
-#### `design_delete`
-
-| Parameter  | Type     | Description                              |
-|------------|----------|------------------------------------------|
-| `flowName` | `string` | Name of the flow the design belongs to   |
-| `name`     | `string` | File name to delete, including its extension |
+Designs are plain files written with the Filesystem plugin's tools, not web-design tools. Write each HTML, CSS and
+JavaScript file into the flow directory with `file_write` (full contents; parent directories are created), change
+existing files with `file_edit`, and read them back with `file_read`. The flow directory must be inside an allowed
+filesystem path.
 
 #### `design_screenshot`
 
@@ -167,7 +133,6 @@ webDesign:
 | Field                 | Type       | Required | Default                                  | Description                                    |
 |-----------------------|------------|----------|------------------------------------------|------------------------------------------------|
 | `webDesignDirectory`  | `string`   | No       | `"web-design"`                           | Directory where design flows are stored        |
-| `fsProvider`          | `string`   | No       | `"posix"`                                | Filesystem provider used in `/api/fs` preview URLs for design files |
 | `previewBaseUrl`      | `string`   | No       | _(running web host URL)_                 | Base URL agents use to open hosted design previews (used by `design_screenshot`) |
 | `screenshotProfile`   | `string`   | No       | `"default"`                              | Browser profile used for screenshots captured from the Web Design app (`captureDesignScreenshot` RPC) |
 | `agentTypes`          | `string[]` | No       | `["web-design", "web-design-visual"]`    | The available agent types that can be used for web design |
@@ -251,7 +216,6 @@ const webDesignService = agent.requireService(WebDesignService);
 | `captureScreenshot(flowName, designName, { width?, height?, save? })` | Screenshot a saved design in a throwaway browser session (same capture as `design_screenshot`); unless `save: false`, store the PNG at `screenshots/<name>-<w>x<h>-<timestamp>.png` in the flow |
 | `listDesignHistory(flowName, designName)` | List history snapshots for a design (newest first) |
 | `getDesignVersion(flowName, designName, versionId)` | Read one history snapshot's content, or `null` if missing |
-| `getFsProvider()` | Return the filesystem provider used in `/api/fs` preview URLs |
 | `getPreviewBaseUrl()` | Return the configured preview base URL, if any |
 | `getPreviewToken()` / `verifyPreviewToken(token)` | Per-boot token gating the `/api/web-design/preview` HTTP resource |
 
@@ -323,7 +287,7 @@ The plugin registers a `Web Design RPC` endpoint at `/rpc/web-design`:
 
 | Method                       | Type      | Description                                                                 |
 |------------------------------|-----------|-----------------------------------------------------------------------------|
-| `getWebDesignConfiguration`  | query     | Get web design configuration (`agentTypes`, `webDesignDirectory`, `serveDirectory`, `fsProvider`, `previewBaseUrl`) |
+| `getWebDesignConfiguration`  | query     | Get web design configuration (`agentTypes`, `webDesignDirectory`, `serveDirectory`, `previewBaseUrl`) |
 | `listFlows`                  | query     | List all flows                                                              |
 | `streamFlows`                | stream    | Polling stream of flows (3s interval)                                       |
 | `createFlow`                 | mutation  | Create a new flow                                                           |

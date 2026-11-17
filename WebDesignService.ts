@@ -120,11 +120,6 @@ export default class WebDesignService implements TokenRingService {
     return this.options.webDesignDirectory;
   }
 
-  /** Filesystem provider used in /api/fs preview URLs (e.g. `posix`). */
-  getFsProvider(): string {
-    return this.options.fsProvider;
-  }
-
   /** Base URL for agents to open hosted design previews, or null to use the web host URL. */
   getPreviewBaseUrl(): string | undefined {
     return this.options.previewBaseUrl;
@@ -148,7 +143,7 @@ export default class WebDesignService implements TokenRingService {
 
   /**
    * Path to the web-design directory relative to the WORKSPACE directory.
-   * `/api/fs/{provider}/...` resolves relative paths against the workspace
+   * `/api/fs/...` resolves relative paths against the workspace
    * directory. Typically `web-design`.
    */
   getServeDirectory(): string {

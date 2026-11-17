@@ -66,7 +66,7 @@ async function resolveBaseUrl(agent: Agent, webDesignService: WebDesignService):
 const description =
   "Captures a screenshot of a saved design rendered in a headless browser and returns it as an image, " +
   "together with any console errors the page produced. Use it to visually review a mockup after writing it: " +
-  "check layout, spacing, contrast, and hierarchy, then iterate with design_write until the design looks right. " +
+  "check layout, spacing, contrast, and hierarchy, then iterate with file_write or file_edit until the design looks right. " +
   "Viewport only - capture mobile and desktop widths separately.";
 
 const inputSchema = z.object({

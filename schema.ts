@@ -38,11 +38,8 @@ export const WebDesignServiceConfigSchema = z
       .string()
       .default("web-design")
       .meta({ description: "Directory where design flows are stored" } satisfies ConfigFieldMeta),
-    /** Filesystem provider that serves design files over /api/fs (must match the filesystem plugin setup). */
-    fsProvider: z
-      .string()
-      .default("posix")
-      .meta({ description: "Filesystem provider used in /api/fs preview URLs for design files" } satisfies ConfigFieldMeta),
+    /** Removed: there is one host filesystem, so /api/fs preview URLs need no provider. */
+    fsProvider: z.never().exactOptional(),
     /**
      * Base URL agents use to open hosted design previews (design_screenshot). Defaults to the
      * running web host's own URL when omitted.

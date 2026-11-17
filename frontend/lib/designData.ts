@@ -1,7 +1,7 @@
 import { useWebDesignConfiguration } from "@tokenring-ai/one-frontend/rpc.ts";
 import formatError from "@tokenring-ai/utility/error/formatError";
 import { useCallback, useEffect, useState } from "react";
-import { DEFAULT_WEB_DESIGN_FS_PROVIDER, DEFAULT_WEB_DESIGN_SERVE_DIRECTORY, designKey } from "./paths.ts";
+import { DEFAULT_WEB_DESIGN_SERVE_DIRECTORY, designKey } from "./paths.ts";
 import { type DesignDocument, loadDesign, useDesignDocument } from "./webDesignStore.ts";
 
 /** Where design files are served from, with the service defaults while the RPC loads. */
@@ -9,7 +9,6 @@ export function useWebDesignHosting() {
   const configuration = useWebDesignConfiguration();
   return {
     serveDirectory: configuration.data?.serveDirectory ?? DEFAULT_WEB_DESIGN_SERVE_DIRECTORY,
-    fsProvider: configuration.data?.fsProvider ?? DEFAULT_WEB_DESIGN_FS_PROVIDER,
     agentTypes: configuration.data?.agentTypes ?? ["web-design"],
   };
 }

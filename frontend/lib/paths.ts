@@ -13,8 +13,6 @@ export const FILE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*(\/[a-zA-Z0-9][a-zA
  * configuration RPC loads. Matches the service default `webDesignDirectory`.
  */
 export const DEFAULT_WEB_DESIGN_SERVE_DIRECTORY = "web-design";
-/** Fallback filesystem provider used in preview URLs while the configuration RPC loads. */
-export const DEFAULT_WEB_DESIGN_FS_PROVIDER = "posix";
 
 export const DEFAULT_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -84,11 +82,11 @@ export function editorLanguage(fileName: string): string {
 }
 
 /** URL of one design file as served by the filesystem HTTP resource. */
-export function previewPath(fsProvider: string, serveDirectory: string, flowName: string, fileName: string): string {
-  return workspaceFileUrl(fsProvider, `${serveDirectory.replace(/\/+$/, "")}/${flowName}/${fileName}`);
+export function previewPath(serveDirectory: string, flowName: string, fileName: string): string {
+  return workspaceFileUrl(`${serveDirectory.replace(/\/+$/, "")}/${flowName}/${fileName}`);
 }
 
 /** URL of a flow's directory, used as the `<base href>` of sandboxed previews. */
-export function previewFlowPath(fsProvider: string, serveDirectory: string, flowName: string): string {
-  return workspaceFileUrl(fsProvider, `${serveDirectory.replace(/\/+$/, "")}/${flowName}/`);
+export function previewFlowPath(serveDirectory: string, flowName: string): string {
+  return workspaceFileUrl(`${serveDirectory.replace(/\/+$/, "")}/${flowName}/`);
 }

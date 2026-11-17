@@ -15,12 +15,10 @@ export default {
         /** Configured directory name relative to the workspace (e.g. `web-design`). */
         webDesignDirectory: z.string(),
         /**
-         * Working-directory-relative path for `/api/fs/{provider}/...` preview URLs.
+         * Workspace-relative path for `/api/fs/...` preview URLs.
          * Typically `.tokenring/web-design` when workspaceDirectory is `<working>/.tokenring`.
          */
         serveDirectory: z.string(),
-        /** Filesystem provider used in `/api/fs/{provider}/...` preview URLs. */
-        fsProvider: z.string(),
         /** Base URL agents use to open hosted design previews; null means "derive from the web host". */
         previewBaseUrl: z.string().nullable(),
       }),

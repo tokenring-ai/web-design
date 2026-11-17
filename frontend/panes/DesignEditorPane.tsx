@@ -6,6 +6,7 @@ import LoadingState from "@tokenring-ai/one-frontend/components/ui/LoadingState.
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
 import ViewHeader from "@tokenring-ai/one-frontend/components/ui/ViewHeader.tsx";
 import ViewShell from "@tokenring-ai/one-frontend/components/ui/ViewShell.tsx";
+import { useConfirmDialog } from "@tokenring-ai/one-frontend/hooks/useConfirmDialog.tsx";
 import { useFileUpload } from "@tokenring-ai/one-frontend/hooks/useFileUpload.ts";
 import { useKeyboardShortcuts } from "@tokenring-ai/one-frontend/hooks/useKeyboardShortcuts.ts";
 import { useRemoteChangeDetection } from "@tokenring-ai/one-frontend/hooks/useRemoteChangeDetection.ts";
@@ -29,6 +30,7 @@ import { useWebDesignLayoutNavigation } from "../lib/useWebDesignLayoutNavigatio
 import {
   attachDesign,
   bumpPreviewRevision,
+  getDesignDraft,
   refreshAttachedDesign,
   setDesignDocument,
   setDesignDraft,
@@ -110,11 +112,37 @@ function DesignEditor({ flowName, designName }: { flowName: string; designName: 
     editor.focus();
   }, [reveal]);
 
+  const { openConfirm, Dialog: ConfirmDialog } = useConfirmDialog();
+  const savingRef = useRef(false);
+
+  // A draft that matches the saved text is no edit: drop it, or it would hide an agent's later changes.
+  useEffect(() => {
+    if (document && draft !== null && draft === document.content) setDesignDraft(key, null);
+  }, [document, draft, key]);
+
   const handleSave = useCallback(async () => {
-    if (!isReady || draft === null) return;
+    // One save at a time: Ctrl+S during a save would send it twice.
+    if (!isReady || draft === null || savingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
+    const sent = draft;
     try {
-      const { design } = await webDesignRPCClient.updateDesign({ flowName, name: designName, content: draft, encoding: document.encoding });
+      // Unsaved edits hold back the silent reload, so an agent may have changed the design since it
+      // was loaded. Saving would overwrite that change: ask first.
+      const { design: current } = await webDesignRPCClient.getDesign({ flowName, name: designName });
+      if (current && current.updatedAt !== document.updatedAt) {
+        const overwrite = await openConfirm({
+          id: "web-design-overwrite-newer",
+          title: "This design changed since you opened it",
+          message: "An agent or another window saved a newer version. Saving now replaces it with your edits. Use History to see the other version.",
+          confirmText: "Save mine anyway",
+          cancelText: "Cancel",
+          variant: "danger",
+          dontAskAgain: false,
+        });
+        if (!overwrite) return;
+      }
+      const { design } = await webDesignRPCClient.updateDesign({ flowName, name: designName, content: sent, encoding: document.encoding });
       setDesignDocument({
         flowName: design.flowName,
         name: design.name,
@@ -123,7 +151,8 @@ function DesignEditor({ flowName, designName }: { flowName: string; designName: 
         mimeType: design.mimeType,
         updatedAt: design.updatedAt,
       });
-      setDesignDraft(key, null);
+      // Text typed while the save was in flight is still unsaved: keep it.
+      if (getDesignDraft(key) === sent) setDesignDraft(key, null);
       bumpPreviewRevision(key);
       // Keep an attached chip for this design in step with the saved content.
       refreshAttachedDesign(design);
@@ -133,9 +162,10 @@ function DesignEditor({ flowName, designName }: { flowName: string; designName: 
     } catch (e: unknown) {
       toastManager.error(formatError(e), { duration: 4000 });
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
-  }, [designName, document, draft, flowName, flows, isReady, key]);
+  }, [designName, document, draft, flowName, flows, isReady, key, openConfirm]);
 
   // Ctrl/⌘+S saves the design on screen.
   useKeyboardShortcuts([{ key: "s", allowInEditable: true, enabled: panel.isActive && isDirty, handler: () => void handleSave() }]);
@@ -362,6 +392,7 @@ function DesignEditor({ flowName, designName }: { flowName: string; designName: 
           onClose={() => setSaveAsOpen(false)}
         />
       )}
+      <ConfirmDialog />
     </ViewShell>
   );
 }

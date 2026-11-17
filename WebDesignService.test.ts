@@ -94,10 +94,8 @@ describe("WebDesignService", () => {
         printLogs: false,
       },
     });
-    const fileSystem = new FileSystemService(app, FileSystemConfigSchema.parse({ agentDefaults: { provider: "disk", selectedFiles: [] } }));
-    fileSystem.registerFileSystemProvider("disk", createDiskProvider() as never);
+    const fileSystem = new FileSystemService(app, FileSystemConfigSchema.parse({ agentDefaults: { selectedFiles: [] } }), createDiskProvider() as never);
     app.addService(FileSystemService, fileSystem);
-    fileSystem.start();
 
     const service = new WebDesignService(app);
     service.reconfigure(WebDesignServiceConfigSchema.parse({ webDesignDirectory: path.join(workspace, "web-design") }));

@@ -49,7 +49,7 @@ function DesignPreview({ flowName, designName }: { flowName: string; designName:
   const { document, error, reload } = useDesignLoad(flowName, designName);
   const draft = useDesignDraft(key);
   const previewRevision = usePreviewRevision(key);
-  const { fsProvider, serveDirectory } = useWebDesignHosting();
+  const { serveDirectory } = useWebDesignHosting();
   const session = useWebDesignAgentSession();
 
   // The flow's file list changes whenever an agent writes a sibling asset, so the
@@ -176,7 +176,7 @@ function DesignPreview({ flowName, designName }: { flowName: string; designName:
     [designName, flowName, session],
   );
 
-  const hostedPreviewUrl = `${previewPath(fsProvider, serveDirectory, flowName, designName)}?v=${encodeURIComponent(`${previewRevision}:${flowRevision}`)}`;
+  const hostedPreviewUrl = `${previewPath(serveDirectory, flowName, designName)}?v=${encodeURIComponent(`${previewRevision}:${flowRevision}`)}`;
   // Binary assets preview from the hosted URL; text and HTML always mirror the editor.
   const useHostedPreview = !isTextFile;
 
@@ -184,9 +184,9 @@ function DesignPreview({ flowName, designName }: { flowName: string; designName:
   // iframe (opaque origin), not from rewriting the content. A <base> tag keeps
   // sibling links (styles.css, other pages) resolving against the hosted flow.
   const previewHtml = useMemo(() => {
-    const baseTag = `<base href="${previewFlowPath(fsProvider, serveDirectory, flowName)}">`;
+    const baseTag = `<base href="${previewFlowPath(serveDirectory, flowName)}">`;
     return /<head(\s[^>]*)?>/i.test(previewSource) ? previewSource.replace(/<head(\s[^>]*)?>/i, match => `${match}${baseTag}`) : `${baseTag}${previewSource}`;
-  }, [flowName, fsProvider, previewSource, serveDirectory]);
+  }, [flowName, previewSource, serveDirectory]);
 
   // The bridge script rides along with HTML previews (srcDoc), powering annotation
   // picking and live pin positions; it stays idle until the parent sends a message.
